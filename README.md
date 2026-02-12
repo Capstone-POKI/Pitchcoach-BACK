@@ -1,48 +1,44 @@
 # POKI Backend
 
-NestJS + Prisma 기반의 백엔드 초기 세팅입니다. 아래에 현재 폴더 구조, 설치해야 할 것, 로컬 실행 방법, 기능 개발 흐름을 정리했습니다.
+NestJS + Prisma 기반 백엔드입니다.
+현재 구현의 중심은 `Auth`이며, Swagger에는 `Auth API`만 노출되도록 설정되어 있습니다.
 
-**요약**
-- 런타임: Node.js, 패키지 매니저: `pnpm`
-- DB: PostgreSQL (`docker-compose.yml` 제공)
-- ORM: Prisma (`prisma/schema.prisma`)
-- 인증: JWT (`AuthModule`)
-- 외부 AI 서비스 연동: FastAPI 서버 클라이언트 (`FastApiClient`)
-- API 문서: Swagger (`/api-docs`)
+## 1) Tech Stack
+- Node.js 20
+- NestJS 11
+- pnpm
+- PostgreSQL + Prisma
+- JWT (`@nestjs/jwt`, `passport-jwt`)
+- Validation (`class-validator`, `ValidationPipe`)
+- Swagger (`@nestjs/swagger`)
 
-**폴더 구조**
-- `src/main.ts`: 앱 부트스트랩, Swagger, 전역 예외 필터 등록
-- `src/app.module.ts`: 루트 모듈, 전역 설정 및 모듈 구성
-- `src/common/filters`: 전역 예외 필터
-- `src/infra/prisma`: Prisma 전역 DI (`PrismaService`, `PrismaModule`)
-- `src/infra/fastapi`: FastAPI 연동 클라이언트
-- `src/modules/auth`: 인증 모듈 (JWT, 로그인/회원가입)
-- `src/modules/user`: 유저 모듈 (예시 조회 API)
-- `src/modules/ai`: AI 모듈 (FastAPI 연동 예시)
-- `prisma/schema.prisma`: 데이터베이스 스키마
-- `prisma/migrations`: Prisma 마이그레이션
-- `test`: e2e 테스트 설정 및 샘플
-- `docker-compose.yml`: 로컬 PostgreSQL
+## 2) Project Structure
+- `src/main.ts`
+  - 전역 `ValidationPipe` 적용 (`whitelist`, `forbidNonWhitelisted`, `transform`)
+  - 전역 `GlobalExceptionFilter` 적용
+  - Swagger 문서 생성 (`include: [AuthModule]`)
+- `src/app.module.ts`
+  - `ConfigModule`, `PrismaModule`, `AuthModule`, `UserModule`, `AiModule`, `FastApiModule` 등록
+- `src/modules/auth`
+  - `AuthController`: `/api/auth/signup`, `/api/auth/login`, `/api/auth/me`
+  - `AuthService`: 회원가입/로그인, bcrypt 해시, JWT 발급, refresh token hash 저장
+  - `JwtStrategy`: access token 검증 + 삭제 유저/refresh 토큰 차단
+- `src/modules/user`
+  - `GET /users` (Swagger에는 미노출)
+- `src/modules/ai`
+  - `GET /ai/test` (Swagger에는 미노출)
+- `src/infra/prisma`
+  - Prisma 전역 DI (`PrismaService`, `PrismaModule`)
+- `src/infra/fastapi`
+  - 외부 FastAPI 연동 클라이언트
+- `prisma/schema.prisma`
+  - `User`, `Pitch` 모델 및 enum 정의
+- `prisma/migrations`
+  - DB 마이그레이션 이력
 
-**필수 설치**
-- Node.js (LTS 권장)
-- `pnpm`
-- Docker Desktop (로컬 DB 사용할 경우)
+## 3) Environment Variables
+루트 `.env` 파일 필요:
 
-**설치**
-```bash
-pnpm install
-```
-
-**환경 변수**
-아래 변수들이 코드에서 사용됩니다. 프로젝트 루트에 `.env`를 생성하세요.
-
-- `DATABASE_URL`: PostgreSQL 연결 문자열
-- `JWT_SECRET`: JWT 서명 키
-- `AI_SERVER_URL`: FastAPI 서버 베이스 URL
-- `PORT`: 서버 포트 (기본 3000)
-
-예시:
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/poki?schema=public"
 JWT_SECRET="change-me"
@@ -50,123 +46,208 @@ AI_SERVER_URL="http://localhost:8000"
 PORT=3000
 ```
 
-**로컬 DB 실행**
-```bash
-docker-compose up -d
-```
+주의:
+- `JWT_SECRET` 누락 시 앱이 시작 단계에서 에러로 종료됩니다.
+- `AI_SERVER_URL`은 `GET /ai/test` 호출 시 사용됩니다.
 
-**Prisma 사용**
-- 스키마 변경 후 마이그레이션 생성 및 적용
+## 4) Local Setup
 ```bash
-pnpm prisma migrate dev
-```
-
-- Prisma Client 재생성
-```bash
+pnpm install
 pnpm prisma generate
-```
-
-**실행**
-```bash
-# 개발 모드
+pnpm prisma migrate dev
 pnpm run start:dev
-
-# 일반 실행
-pnpm run start
-
-# 프로덕션 빌드 후 실행
-pnpm run build
-pnpm run start:prod
 ```
 
-**API 문서**
-- `http://localhost:3000/api-docs`
+서버 기본 주소:
+- App: `http://localhost:3000`
+- Swagger: `http://localhost:3000/api-docs`
 
-**기능 개발 흐름 (권장)**
-1. `src/modules/<feature>`에 모듈/서비스/컨트롤러 생성
-2. DTO는 `src/modules/<feature>/dto`에 정의
-3. DB 작업은 `PrismaService`로 처리 (`src/infra/prisma/prisma.service.ts`)
-4. 외부 서비스 연동은 `src/infra`에 클라이언트로 분리
-5. `src/app.module.ts`에 새 모듈 등록
-6. 필요 시 Swagger 데코레이터 추가
+## 5) Swagger Policy
+현재 Swagger는 Auth만 노출합니다.
 
-**예시: 새 기능 모듈 추가**
-```bash
-nest g module modules/feature
-nest g service modules/feature
-nest g controller modules/feature
+```ts
+SwaggerModule.createDocument(app, config, {
+  include: [AuthModule],
+});
 ```
 
-**테스트**
+즉, `users`, `ai` API는 실제로 호출 가능하지만 문서에는 표시되지 않습니다.
+
+## 6) API Overview
+
+### 6.1 Auth (Swagger 노출)
+Base path: `/api/auth`
+
+#### POST `/api/auth/signup`
+설명:
+- 이메일/전화번호 중복 검사
+- 비밀번호 bcrypt 해시 저장
+- access/refresh 토큰 발급
+- refresh 토큰 해시와 만료 시각 저장
+
+Request body:
+```json
+{
+  "name": "홍길동",
+  "email": "user@example.com",
+  "phone": "010-1234-5678",
+  "password": "Passw0rd!"
+}
+```
+
+성공 응답 예시:
+```json
+{
+  "user_id": "uuid",
+  "email": "user@example.com",
+  "name": "홍길동",
+  "is_profile_complete": false,
+  "access_token": "...",
+  "refresh_token": "...",
+  "message": "회원가입이 완료되었습니다. 추가 정보를 입력해주세요."
+}
+```
+
+실패 케이스:
+- `409 EMAIL_ALREADY_EXISTS`
+- `409 PHONE_ALREADY_EXISTS`
+
+#### POST `/api/auth/login`
+설명:
+- 이메일 + 비밀번호 검증
+- 삭제 계정(`isDeleted=true`) 로그인 차단
+- 성공 시 access/refresh 토큰 재발급
+
+Request body:
+```json
+{
+  "email": "user@example.com",
+  "password": "Passw0rd!"
+}
+```
+
+성공 응답 예시:
+```json
+{
+  "user_id": "uuid",
+  "email": "user@example.com",
+  "name": "홍길동",
+  "is_profile_complete": false,
+  "access_token": "...",
+  "refresh_token": "..."
+}
+```
+
+실패 케이스:
+- `401 INVALID_CREDENTIALS`
+
+#### GET `/api/auth/me`
+설명:
+- `Authorization: Bearer <access_token>` 필요
+- JWT 검증 후 사용자 프로필 반환
+
+성공 응답 예시:
+```json
+{
+  "user_id": "uuid",
+  "email": "user@example.com",
+  "name": "홍길동",
+  "phone": "010-1234-5678",
+  "auth_type": "EMAIL",
+  "gender": null,
+  "education": null,
+  "business_field": null,
+  "business_duration": null,
+  "is_profile_complete": false
+}
+```
+
+실패 케이스:
+- `401 UNAUTHORIZED`
+
+### 6.2 기타 API (Swagger 미노출)
+- `GET /users`
+- `GET /ai/test`
+
+## 7) Validation Rules
+
+### SignupDto
+- `name`: 빈 값 불가
+- `email`: 이메일 형식
+- `phone`: `01x-xxxx-xxxx` 형식 검증
+- `password`: 영문/숫자/특수문자 포함 8~16자
+
+### LoginDto
+- `email`: 이메일 형식 + 빈 값 불가
+- `password`: 문자열, 빈 값 불가, 8~16자
+
+## 8) Auth/Security Details
+- Access token TTL: `1h`
+- Refresh token TTL: `7d`
+- refresh token은 DB에 평문 저장하지 않고 `refreshTokenHash` 저장
+- 로그인/회원가입 시 `lastLoginAt`, `refreshTokenExpiresAt` 갱신
+- `JwtStrategy`에서 다음 토큰 차단:
+  - `sub` 없는 토큰
+  - `type=refresh` 토큰 (보호 API 접근 차단)
+  - 삭제 유저의 토큰
+
+## 9) Database Schema (Summary)
+
+### User
+핵심 필드:
+- 식별/인증: `id`, `email`, `phone`, `password`, `authType`
+- 프로필: `name`, `gender`, `education`, `businessField`, `businessDuration`
+- 상태: `isProfileComplete`, `isDeleted`, `deletedAt`
+- 인증 보안: `refreshTokenHash`, `refreshTokenExpiresAt`, `lastLoginAt`
+- 통계: `totalPitchesCount`, `completedPitchesCount`
+
+### Pitch
+핵심 필드:
+- 관계: `userId` (User 1:N)
+- 내용: `title`, `pitchType`, `durationMinutes`, `hasNotice`, `noticeType`
+- 상태: `status`, `isDeleted`, `deletedAt`
+
+## 10) Error Response Format
+전역 예외 필터 기준:
+
+```json
+{
+  "success": false,
+  "statusCode": 401,
+  "message": "토큰이 유효하지 않습니다",
+  "path": "/api/auth/me",
+  "timestamp": "2026-02-12T00:00:00.000Z"
+}
+```
+
+## 11) Test
 ```bash
-# 단위 테스트
+# unit
 pnpm run test
 
-# e2e 테스트
+# auth flow 회귀 테스트 3개
+pnpm run test -- src/modules/auth/auth.flow.spec.ts
+
+# e2e
 pnpm run test:e2e
-
-# 커버리지
-pnpm run test:cov
 ```
 
-**배포/운영 가이드**
-- 환경별 `.env`를 분리해서 관리하는 것을 권장합니다. 예: `.env.development`, `.env.staging`, `.env.production`
-- 공통 변수는 동일 키로 유지하고 값만 환경별로 교체하세요.
-- 운영 환경에서는 반드시 `JWT_SECRET`을 안전하게 관리하세요.
-- DB 마이그레이션은 배포 파이프라인에서 명시적으로 실행하도록 구성하세요.
+`src/modules/auth/auth.flow.spec.ts` 검증 항목:
+1. 정상 로그인 -> `/me` 성공
+2. 삭제 계정 로그인 -> 401
+3. refresh 토큰으로 보호 API 접근 -> 401
 
-**환경별 .env 예시**
-- 개발(로컬)
-```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/poki?schema=public"
-JWT_SECRET="dev-secret"
-AI_SERVER_URL="http://localhost:8000"
-PORT=3000
-```
-- 스테이징
-```env
-DATABASE_URL="postgresql://<user>:<pass>@<host>:5432/poki?schema=public"
-JWT_SECRET="<staging-secret>"
-AI_SERVER_URL="https://staging-ai.example.com"
-PORT=3000
-```
-- 프로덕션
-```env
-DATABASE_URL="postgresql://<user>:<pass>@<host>:5432/poki?schema=public"
-JWT_SECRET="<prod-secret>"
-AI_SERVER_URL="https://ai.example.com"
-PORT=3000
-```
+## 12) CI
+`.github/workflows/ci.yml`
+1. `pnpm install --frozen-lockfile`
+2. `pnpm prisma generate`
+3. `pnpm run --if-present test`
+4. `pnpm run build`
 
-**CI/CD 권장 흐름(예시)**
-1. 의존성 설치: `pnpm install --frozen-lockfile`
-2. 정적 검사: `pnpm run lint`
-3. 테스트: `pnpm run test` (필요 시 `pnpm run test:e2e`)
-4. 빌드: `pnpm run build`
-5. DB 마이그레이션: `pnpm prisma migrate deploy`
-6. 런타임 실행: `pnpm run start:prod`
-
-**개발 규칙/컨벤션**
-- 폴더 구조는 `src/modules/<feature>` 단위로 유지합니다.
-- 컨트롤러/서비스/모듈 파일명은 `*.controller.ts`, `*.service.ts`, `*.module.ts` 규칙을 사용합니다.
-- DTO는 각 모듈의 `dto` 폴더에 두고 `class-validator` 데코레이터로 유효성 규칙을 정의합니다.
-- 외부 연동은 `src/infra` 아래에 클라이언트로 분리합니다.
-- DB 접근은 `PrismaService`만 사용하고, 서비스 레이어에서 호출합니다.
-- 예외 처리는 `HttpException` 또는 하위 예외 클래스를 사용합니다.
-- 전역 예외 포맷은 `GlobalExceptionFilter`가 담당합니다.
-- 현재 전역 `ValidationPipe`는 설정되어 있지 않습니다. 필요 시 `src/main.ts`에 추가하세요.
-- Lint/Format은 `pnpm run lint`, `pnpm run format`을 사용합니다.
-
-**현재 구현된 API (간단 요약)**
-- `POST /auth/signup`: 회원가입 (예시, 구현 예정)
-- `POST /auth/login`: 로그인 (JWT 발급)
-- `GET /auth/me`: JWT 인증 필요
-- `GET /users`: 유저 목록 조회
-- `GET /ai/test`: FastAPI 연동 테스트
-
-**주의 사항**
-- `AuthService.signup`은 아직 로직이 비어 있습니다.
-- `AI_SERVER_URL`이 없으면 `AiService` 호출이 실패합니다.
-- `JWT_SECRET`이 없으면 기본 키(`dev-secret`)로 동작합니다.
-
-필요한 섹션이나 상세 문서를 더 추가하고 싶으면 알려주세요.
+## 13) Common Issues
+- Swagger에 users/ai가 안 보임
+  - 정상입니다. 현재 문서 노출 범위를 `AuthModule`로 제한했습니다.
+- `JWT_SECRET is required`로 서버가 시작 실패
+  - `.env`에 `JWT_SECRET`을 설정하세요.
+- Prisma 타입 오류
+  - `pnpm prisma generate` 후 재빌드하세요.

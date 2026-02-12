@@ -7,8 +7,73 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum AuthType {
+  EMAIL
+  GOOGLE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  createdAt DateTime @default(now())
+  id                    String   @id @default(uuid())
+  email                 String   @unique
+  name                  String
+  phone                 String?  @unique
+  password              String?
+  authType              AuthType
+  gender                Gender?
+  education             String?
+  businessField         String?
+  businessDuration      String?
+  isProfileComplete     Boolean  @default(false)
+  totalPitchesCount     Int      @default(0)
+  completedPitchesCount Int      @default(0)
+  lastLoginAt           DateTime?
+  refreshTokenHash      String?
+  refreshTokenExpiresAt DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+  isDeleted             Boolean  @default(false)
+
+  pitches               Pitch[]
+}
+
+enum PitchStatus {
+  SETUP
+  NOTICE_ANALYSIS
+  IRDECK_ANALYSIS
+  REHEARSAL
+  COMPLETED
+}
+
+enum PitchType {
+  ELEVATOR
+  VC_DEMO
+  GOVERNMENT
+  COMPETITION
+}
+
+model Pitch {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title           String
+  pitchType       PitchType
+  durationMinutes Int
+  hasNotice       Boolean     @default(false)
+  noticeType      String?
+  status          PitchStatus @default(SETUP)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+  isDeleted       Boolean     @default(false)
+
+  @@index([userId])
+  @@index([status])
 }
