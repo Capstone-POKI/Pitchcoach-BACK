@@ -18,28 +18,28 @@ enum Gender {
 }
 
 model User {
-  id                    String   @id @default(uuid())
-  email                 String   @unique
+  id                    String    @id @default(uuid())
+  email                 String    @unique
   name                  String
-  phone                 String?  @unique
+  phone                 String?   @unique
   password              String?
   authType              AuthType
   gender                Gender?
   education             String?
   businessField         String?
   businessDuration      String?
-  isProfileComplete     Boolean  @default(false)
-  totalPitchesCount     Int      @default(0)
-  completedPitchesCount Int      @default(0)
+  isProfileComplete     Boolean   @default(false)
+  totalPitchesCount     Int       @default(0)
+  completedPitchesCount Int       @default(0)
   lastLoginAt           DateTime?
   refreshTokenHash      String?
   refreshTokenExpiresAt DateTime?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
   deletedAt             DateTime?
-  isDeleted             Boolean  @default(false)
+  isDeleted             Boolean   @default(false)
 
-  pitches               Pitch[]
+  pitches Pitch[]
 }
 
 enum PitchStatus {
@@ -57,23 +57,120 @@ enum PitchType {
   COMPETITION
 }
 
+enum NoticeType {
+  PDF
+  MANUAL
+  NONE
+}
+
 model Pitch {
-  id              String      @id @default(uuid())
-  userId          String
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   title           String
   pitchType       PitchType
   durationMinutes Int
   hasNotice       Boolean     @default(false)
-  noticeType      String?
+  notice          Notice?
   status          PitchStatus @default(SETUP)
 
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  deletedAt       DateTime?
-  isDeleted       Boolean     @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  isDeleted Boolean   @default(false)
+
+  noticeType NoticeType?
 
   @@index([userId])
   @@index([status])
+}
+
+enum NoticeAnalysisStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum PdfUploadStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Notice {
+  id String @id @default(uuid())
+
+  pitchId String @unique
+  pitch   Pitch  @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+
+  pdfUrl          String?
+  pdfSizeBytes    BigInt?
+  pdfUploadStatus PdfUploadStatus?
+
+  noticeName        String
+  hostOrganization  String?
+  recruitmentType   String?
+  targetAudience    String?
+  applicationPeriod String?
+
+  summary          String?
+  coreRequirements String?
+  sourceReference  String?
+
+  additionalCriteria String?
+  irDeckGuide        String?
+
+  analysisStatus NoticeAnalysisStatus @default(PENDING)
+  errorMessage   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  evaluationCriteria NoticeEvaluationCriteria[]
+
+  @@index([analysisStatus])
+}
+
+model NoticeEvaluationCriteria {
+  id String @id @default(uuid())
+
+  noticeId String
+  notice   Notice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+
+  criteriaName String
+  points       Int?
+  importance   String? // HIGH / MEDIUM / LOW
+  displayOrder Int
+
+  parentId String?
+  parent   NoticeEvaluationCriteria?  @relation("CriteriaToParent", fields: [parentId], references: [id], onDelete: Cascade)
+  children NoticeEvaluationCriteria[] @relation("CriteriaToParent")
+
+  pitchcoachInterpretation String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  irRequirements IRRequirement[]
+
+  @@index([noticeId])
+}
+
+model IRRequirement {
+  id String @id @default(uuid())
+
+  criteriaId String
+  criteria   NoticeEvaluationCriteria @relation(fields: [criteriaId], references: [id], onDelete: Cascade)
+
+  requirementName String
+  isMandatory     Boolean @default(false)
+  description     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([criteriaId])
 }
