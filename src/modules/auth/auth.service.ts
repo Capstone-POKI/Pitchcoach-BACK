@@ -7,6 +7,7 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { SignupDto } from './dto/signup.dto';
+import { GoogleAuthService } from './google-auth.service';
 
 const ACCESS_TOKEN_EXPIRES_IN = '1h';
 const REFRESH_TOKEN_EXPIRES_IN = '7d';
@@ -17,6 +18,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private googleAuthService: GoogleAuthService,
   ) {}
 
   private throwInvalidCredentials(): never {
@@ -288,4 +290,63 @@ export class AuthService {
       message: '로그아웃되었습니다.',
     };
   }
+
+  async googleLogin(idToken: string) {
+    const googleUser =
+      await this.googleAuthService.validateIdToken(idToken);
+
+    let user = await this.prisma.user.findUnique({
+      where: { email: googleUser.email },
+    });
+
+    let isNewUser = false;
+
+    if (user?.isDeleted) {
+      throw new UnauthorizedException({
+        error: 'INVALID_CREDENTIALS',
+        message: '이메일 또는 비밀번호가 올바르지 않습니다',
+      });
+    }
+
+    if (!user) {
+      try {
+        user = await this.prisma.user.create({
+          data: {
+            email: googleUser.email,
+            name: googleUser.name,
+            authType: 'GOOGLE',
+            isProfileComplete: false,
+          },
+        });
+        isNewUser = true;
+      } catch (error) {
+        if (this.isUniqueConstraintError(error)) {
+          user = await this.prisma.user.findUnique({
+            where: { email: googleUser.email },
+          });
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    if (!user || user.isDeleted) {
+      throw new UnauthorizedException({
+        error: 'INVALID_CREDENTIALS',
+        message: '이메일 또는 비밀번호가 올바르지 않습니다',
+      });
+    }
+
+    const { accessToken, refreshToken } =
+      await this.issueTokens(user.id, user.email);
+
+    return {
+      user,
+      isNewUser,
+      accessToken,
+      refreshToken,
+    };
+  }
+
+
 }

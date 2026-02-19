@@ -1,4 +1,4 @@
-import {Controller, Post, Body, Get, UseGuards, Req, } from '@nestjs/common';
+import {Controller, Post, Body, Get, UseGuards, Req, Res, } from '@nestjs/common';
 import { ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
@@ -18,6 +18,8 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { MeResponseDto } from './dto/me-response.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { LogoutDto } from './dto/logout.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
+import type { Response } from 'express';
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -214,4 +216,43 @@ export class AuthController {
       dto.refresh_token,
     );
   }
+
+  @Post('google')
+  @ApiOperation({ summary: '구글 로그인' })
+  @ApiBody({ type: GoogleLoginDto })
+  @ApiUnauthorizedResponse({
+    description: '유효하지 않은 Google 토큰',
+  })
+  async googleLogin(
+    @Body() dto: GoogleLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.googleLogin(dto.id_token);
+
+    if (result.isNewUser) {
+      res.status(201);
+      return {
+        user_id: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        is_new_user: true,
+        is_profile_complete: false,
+        access_token: result.accessToken,
+        refresh_token: result.refreshToken,
+        message:
+          '회원가입이 완료되었습니다. 추가 정보를 입력해주세요.',
+      };
+    }
+
+    return {
+      user_id: result.user.id,
+      email: result.user.email,
+      name: result.user.name,
+      is_new_user: false,
+      is_profile_complete: result.user.isProfileComplete,
+      access_token: result.accessToken,
+      refresh_token: result.refreshToken,
+    };
+  }
+
 }
