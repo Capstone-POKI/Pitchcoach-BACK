@@ -26,6 +26,17 @@ export class AuthService {
     });
   }
 
+  private isUniqueConstraintError(
+    error: unknown,
+  ): error is { code: string; meta?: { target?: string[] } } {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2002'
+    );
+  }
+
   private async issueTokens(userId: string, email: string) {
     const payload = { sub: userId, email };
 
@@ -77,16 +88,38 @@ export class AuthService {
 
     const hashed = await bcrypt.hash(dto.password, 10);
 
-    const user = await this.prisma.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email,
-        phone: dto.phone,
-        password: hashed,
-        authType: 'EMAIL',
-        isProfileComplete: false,
-      },
-    });
+    let user;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          name: dto.name,
+          email: dto.email,
+          phone: dto.phone,
+          password: hashed,
+          authType: 'EMAIL',
+          isProfileComplete: false,
+        },
+      });
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        const targets = error.meta?.target ?? [];
+
+        if (targets.includes('email')) {
+          throw new ConflictException({
+            error: 'EMAIL_ALREADY_EXISTS',
+            message: '이미 가입된 이메일입니다.',
+          });
+        }
+
+        if (targets.includes('phone')) {
+          throw new ConflictException({
+            error: 'PHONE_ALREADY_EXISTS',
+            message: '이미 가입된 전화번호입니다.',
+          });
+        }
+      }
+      throw error;
+    }
 
     const { accessToken, refreshToken } = await this.issueTokens(
       user.id,
@@ -134,6 +167,125 @@ export class AuthService {
       is_profile_complete: user.isProfileComplete,
       access_token: accessToken,
       refresh_token: refreshToken,
+    };
+  }
+
+  async refresh(refreshToken: string) {
+    try {
+      const payload = this.jwtService.verify(refreshToken);
+
+      if (payload.type !== 'refresh') {
+        throw new UnauthorizedException({
+          error: 'INVALID_REFRESH_TOKEN',
+          message: '유효하지 않은 리프레시 토큰입니다',
+        });
+      }
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+      });
+
+      if (
+        !user ||
+        !user.refreshTokenHash ||
+        !user.refreshTokenExpiresAt
+      ) {
+        throw new UnauthorizedException({
+          error: 'INVALID_REFRESH_TOKEN',
+          message: '유효하지 않은 리프레시 토큰입니다',
+        });
+      }
+
+      // 만료 체크
+      if (user.refreshTokenExpiresAt < new Date()) {
+        throw new UnauthorizedException({
+          error: 'REFRESH_TOKEN_EXPIRED',
+          message:
+            '리프레시 토큰이 만료되었습니다. 다시 로그인해주세요.',
+        });
+      }
+
+      // 해시 비교
+      const isMatch = await bcrypt.compare(
+        refreshToken,
+        user.refreshTokenHash,
+      );
+
+      if (!isMatch) {
+        throw new UnauthorizedException({
+          error: 'INVALID_REFRESH_TOKEN',
+          message: '유효하지 않은 리프레시 토큰입니다',
+        });
+      }
+
+      // 🔥 Rotation
+      const { accessToken, refreshToken: newRefresh } =
+        await this.issueTokens(user.id, user.email);
+
+      return {
+        access_token: accessToken,
+        refresh_token: newRefresh,
+      };
+    } catch (err) {
+      if (err instanceof UnauthorizedException) {
+        throw err;
+      }
+
+      if (
+        typeof err === 'object' &&
+        err !== null &&
+        'name' in err &&
+        (err as { name?: string }).name === 'TokenExpiredError'
+      ) {
+        throw new UnauthorizedException({
+          error: 'REFRESH_TOKEN_EXPIRED',
+          message:
+            '리프레시 토큰이 만료되었습니다. 다시 로그인해주세요.',
+        });
+      }
+
+      throw new UnauthorizedException({
+        error: 'INVALID_REFRESH_TOKEN',
+        message: '유효하지 않은 리프레시 토큰입니다',
+      });
+    }
+  }
+
+  async logout(userId: string, refreshToken: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.refreshTokenHash) {
+      throw new UnauthorizedException({
+        error: 'INVALID_REFRESH_TOKEN',
+        message: '유효하지 않은 리프레시 토큰입니다',
+      });
+    }
+
+    const isMatch = await bcrypt.compare(
+      refreshToken,
+      user.refreshTokenHash,
+    );
+
+    if (!isMatch) {
+      throw new UnauthorizedException({
+        error: 'INVALID_REFRESH_TOKEN',
+        message: '유효하지 않은 리프레시 토큰입니다',
+      });
+    }
+
+    // 🔥 무효화
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        refreshTokenHash: null,
+        refreshTokenExpiresAt: null,
+      },
+    });
+
+    return {
+      message: '로그아웃되었습니다.',
     };
   }
 }
