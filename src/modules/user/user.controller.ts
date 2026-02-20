@@ -52,7 +52,7 @@ export class UserController {
     description: '회원 탈퇴 성공',
     schema: {
       example: {
-        message: '회원 탈퇴가 완료되었습니다.',
+        message: '회원 탈퇴가 완료되었습니다!',
       },
     },
   })
