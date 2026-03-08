@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment */
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -20,7 +21,9 @@ describe('Auth flow', () => {
   };
 
   const configService = {
-    get: jest.fn((key: string) => (key === 'JWT_SECRET' ? jwtSecret : undefined)),
+    get: jest.fn((key: string) =>
+      key === 'JWT_SECRET' ? jwtSecret : undefined,
+    ),
   };
 
   const jwtService = new JwtService({ secret: jwtSecret });
@@ -56,11 +59,7 @@ describe('Auth flow', () => {
     const loginResult = await authService.login(user.email, password);
     expect(loginResult.access_token).toBeDefined();
 
-    const payload = jwtService.verify(loginResult.access_token) as {
-      sub: string;
-      email: string;
-      type?: string;
-    };
+    const payload = jwtService.verify(loginResult.access_token);
 
     const validatedUser = await jwtStrategy.validate(payload);
     const meResult = authController.me({ user: validatedUser } as any);
@@ -97,10 +96,7 @@ describe('Auth flow', () => {
     prisma.user.findFirst.mockResolvedValue(user);
 
     const loginResult = await authService.login(user.email, password);
-    const refreshPayload = jwtService.verify(loginResult.refresh_token) as {
-      sub: string;
-      type?: string;
-    };
+    const refreshPayload = jwtService.verify(loginResult.refresh_token);
 
     await expect(jwtStrategy.validate(refreshPayload)).rejects.toBeInstanceOf(
       UnauthorizedException,

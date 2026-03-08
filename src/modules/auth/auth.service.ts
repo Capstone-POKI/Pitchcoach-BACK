@@ -90,9 +90,8 @@ export class AuthService {
 
     const hashed = await bcrypt.hash(dto.password, 10);
 
-    let user;
     try {
-      user = await this.prisma.user.create({
+      const user = await this.prisma.user.create({
         data: {
           name: dto.name,
           email: dto.email,
@@ -102,6 +101,21 @@ export class AuthService {
           isProfileComplete: false,
         },
       });
+
+      const { accessToken, refreshToken } = await this.issueTokens(
+        user.id,
+        user.email,
+      );
+
+      return {
+        user_id: user.id,
+        email: user.email,
+        name: user.name,
+        is_profile_complete: user.isProfileComplete,
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        message: '회원가입이 완료되었습니다. 추가 정보를 입력해주세요.',
+      };
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         const targets = error.meta?.target ?? [];
@@ -122,21 +136,6 @@ export class AuthService {
       }
       throw error;
     }
-
-    const { accessToken, refreshToken } = await this.issueTokens(
-      user.id,
-      user.email,
-    );
-
-    return {
-      user_id: user.id,
-      email: user.email,
-      name: user.name,
-      is_profile_complete: user.isProfileComplete,
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      message: '회원가입이 완료되었습니다. 추가 정보를 입력해주세요.',
-    };
   }
 
   async login(email: string, password: string) {
@@ -174,7 +173,8 @@ export class AuthService {
 
   async refresh(refreshToken: string) {
     try {
-      const payload = this.jwtService.verify(refreshToken);
+      const payload: { sub: string; type: string } =
+        this.jwtService.verify(refreshToken);
 
       if (payload.type !== 'refresh') {
         throw new UnauthorizedException({
@@ -187,11 +187,7 @@ export class AuthService {
         where: { id: payload.sub },
       });
 
-      if (
-        !user ||
-        !user.refreshTokenHash ||
-        !user.refreshTokenExpiresAt
-      ) {
+      if (!user || !user.refreshTokenHash || !user.refreshTokenExpiresAt) {
         throw new UnauthorizedException({
           error: 'INVALID_REFRESH_TOKEN',
           message: '유효하지 않은 리프레시 토큰입니다',
@@ -202,16 +198,12 @@ export class AuthService {
       if (user.refreshTokenExpiresAt < new Date()) {
         throw new UnauthorizedException({
           error: 'REFRESH_TOKEN_EXPIRED',
-          message:
-            '리프레시 토큰이 만료되었습니다. 다시 로그인해주세요.',
+          message: '리프레시 토큰이 만료되었습니다. 다시 로그인해주세요.',
         });
       }
 
       // 해시 비교
-      const isMatch = await bcrypt.compare(
-        refreshToken,
-        user.refreshTokenHash,
-      );
+      const isMatch = await bcrypt.compare(refreshToken, user.refreshTokenHash);
 
       if (!isMatch) {
         throw new UnauthorizedException({
@@ -221,8 +213,10 @@ export class AuthService {
       }
 
       // 🔥 Rotation
-      const { accessToken, refreshToken: newRefresh } =
-        await this.issueTokens(user.id, user.email);
+      const { accessToken, refreshToken: newRefresh } = await this.issueTokens(
+        user.id,
+        user.email,
+      );
 
       return {
         access_token: accessToken,
@@ -241,8 +235,7 @@ export class AuthService {
       ) {
         throw new UnauthorizedException({
           error: 'REFRESH_TOKEN_EXPIRED',
-          message:
-            '리프레시 토큰이 만료되었습니다. 다시 로그인해주세요.',
+          message: '리프레시 토큰이 만료되었습니다. 다시 로그인해주세요.',
         });
       }
 
@@ -265,10 +258,7 @@ export class AuthService {
       });
     }
 
-    const isMatch = await bcrypt.compare(
-      refreshToken,
-      user.refreshTokenHash,
-    );
+    const isMatch = await bcrypt.compare(refreshToken, user.refreshTokenHash);
 
     if (!isMatch) {
       throw new UnauthorizedException({
@@ -292,8 +282,7 @@ export class AuthService {
   }
 
   async googleLogin(idToken: string) {
-    const googleUser =
-      await this.googleAuthService.validateIdToken(idToken);
+    const googleUser = await this.googleAuthService.validateIdToken(idToken);
 
     let user = await this.prisma.user.findUnique({
       where: { email: googleUser.email },
@@ -337,8 +326,10 @@ export class AuthService {
       });
     }
 
-    const { accessToken, refreshToken } =
-      await this.issueTokens(user.id, user.email);
+    const { accessToken, refreshToken } = await this.issueTokens(
+      user.id,
+      user.email,
+    );
 
     return {
       user,
@@ -347,6 +338,4 @@ export class AuthService {
       refreshToken,
     };
   }
-
-
 }

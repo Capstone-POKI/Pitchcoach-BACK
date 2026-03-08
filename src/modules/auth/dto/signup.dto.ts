@@ -34,16 +34,14 @@ export class SignupDto {
 
   @ApiProperty({
     example: 'Abc12345!',
-    description:
-      '비밀번호 (영문, 숫자, 특수문자 포함 8~16자)',
+    description: '비밀번호 (영문, 숫자, 특수문자 포함 8~16자)',
     required: true,
   })
   @Length(8, 16, {
     message: '비밀번호는 8자 이상 16자 이하입니다',
   })
   @Matches(PASSWORD_REGEX, {
-    message:
-      '비밀번호는 영어, 숫자, 특수문자(@$!%*#?&) 포함 8~16자여야 합니다',
+    message: '비밀번호는 영어, 숫자, 특수문자(@$!%*#?&) 포함 8~16자여야 합니다',
   })
   password: string;
 }

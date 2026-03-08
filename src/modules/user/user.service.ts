@@ -8,7 +8,6 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 
-
 @Injectable()
 export class UserService {
   constructor(private prisma: PrismaService) {}
@@ -26,7 +25,6 @@ export class UserService {
 
   // PATCH /api/users/me/profile
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -54,15 +52,26 @@ export class UserService {
       !!data.businessField &&
       !!data.businessDuration;
 
-    let updatedUser;
     try {
-      updatedUser = await this.prisma.user.update({
+      const updatedUser = await this.prisma.user.update({
         where: { id: userId },
         data: {
           ...data,
           isProfileComplete: isComplete,
         },
       });
+
+      return {
+        user_id: updatedUser.id,
+        name: updatedUser.name,
+        phone: updatedUser.phone,
+        gender: updatedUser.gender,
+        education: updatedUser.education,
+        business_field: updatedUser.businessField,
+        business_duration: updatedUser.businessDuration,
+        is_profile_complete: updatedUser.isProfileComplete,
+        updated_at: updatedUser.updatedAt,
+      };
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         const targets = error.meta?.target ?? [];
@@ -76,28 +85,13 @@ export class UserService {
       }
       throw error;
     }
-
-    // ✅ 명세에 맞게 가공해서 반환
-    return {
-      user_id: updatedUser.id,
-      name: updatedUser.name,
-      phone: updatedUser.phone,
-      gender: updatedUser.gender,
-      education: updatedUser.education,
-      business_field: updatedUser.businessField,
-      business_duration: updatedUser.businessDuration,
-      is_profile_complete: updatedUser.isProfileComplete,
-      updated_at: updatedUser.updatedAt,
-    };
   }
-
 
   // DELETE /api/users/me
   async deleteUser(userId: string) {
-
     // 1. 유저 조회
     const user = await this.prisma.user.findUnique({
-      where: {id: userId},
+      where: { id: userId },
     });
 
     // 2. 탈퇴 가능 여부 체크
@@ -109,7 +103,7 @@ export class UserService {
 
     // 3. soft delete 처리
     await this.prisma.user.update({
-      where: {id: userId},
+      where: { id: userId },
       data: {
         isDeleted: true,
         deletedAt: new Date(),
@@ -144,10 +138,7 @@ export class UserService {
     }
 
     // 현재 비밀번호 확인
-    const isMatch = await bcrypt.compare(
-      dto.current_password,
-      user.password,
-    );
+    const isMatch = await bcrypt.compare(dto.current_password, user.password);
 
     if (!isMatch) {
       throw new UnauthorizedException({

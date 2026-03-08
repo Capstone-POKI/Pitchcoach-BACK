@@ -3,7 +3,6 @@ import { PitchStatus, PitchType } from '@prisma/client';
 import { NoticeType } from './notice-type.enum';
 
 export class CreatePitchResponseDto {
-
   @ApiProperty()
   pitch_id: string;
 

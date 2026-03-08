@@ -7,6 +7,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ──────────────────────────────────────────
+// 1. 인증 관련
+// ──────────────────────────────────────────
+
 enum AuthType {
   EMAIL
   GOOGLE
@@ -42,6 +46,10 @@ model User {
   pitches Pitch[]
 }
 
+// ──────────────────────────────────────────
+// 2. 프로젝트 관리
+// ──────────────────────────────────────────
+
 enum PitchStatus {
   SETUP
   NOTICE_ANALYSIS
@@ -72,7 +80,7 @@ model Pitch {
   pitchType       PitchType
   durationMinutes Int
   hasNotice       Boolean     @default(false)
-  notice          Notice?
+  noticeType      NoticeType?
   status          PitchStatus @default(SETUP)
 
   createdAt DateTime  @default(now())
@@ -80,11 +88,19 @@ model Pitch {
   deletedAt DateTime?
   isDeleted Boolean   @default(false)
 
-  noticeType NoticeType?
+  notices    Notice[]
+  irDecks    IRDeck[]
+  rehearsals Rehearsal[]
+  report     Report?
 
   @@index([userId])
   @@index([status])
+  @@index([isDeleted])
 }
+
+// ──────────────────────────────────────────
+// 3. 공고문 분석
+// ──────────────────────────────────────────
 
 enum NoticeAnalysisStatus {
   PENDING
@@ -103,7 +119,7 @@ enum PdfUploadStatus {
 model Notice {
   id String @id @default(uuid())
 
-  pitchId String @unique
+  pitchId String
   pitch   Pitch  @relation(fields: [pitchId], references: [id], onDelete: Cascade)
 
   pdfUrl          String?
@@ -126,11 +142,19 @@ model Notice {
   analysisStatus NoticeAnalysisStatus @default(PENDING)
   errorMessage   String?
 
+  version  Int     @default(1)
+  isLatest Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   evaluationCriteria NoticeEvaluationCriteria[]
+  irDecks            IRDeck[]
+  reports            Report[]
 
+  @@index([pitchId])
+  @@index([pitchId, version])
+  @@index([pitchId, isLatest])
   @@index([analysisStatus])
 }
 
@@ -142,7 +166,7 @@ model NoticeEvaluationCriteria {
 
   criteriaName String
   points       Int?
-  importance   String? // HIGH / MEDIUM / LOW
+  importance   String?
   displayOrder Int
 
   parentId String?
@@ -150,11 +174,13 @@ model NoticeEvaluationCriteria {
   children NoticeEvaluationCriteria[] @relation("CriteriaToParent")
 
   pitchcoachInterpretation String?
+  irGuide                  String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   irRequirements IRRequirement[]
+  criteriaScores CriteriaScore[]
 
   @@index([noticeId])
 }
@@ -173,4 +199,334 @@ model IRRequirement {
   updatedAt DateTime @updatedAt
 
   @@index([criteriaId])
+}
+
+// ──────────────────────────────────────────
+// 4. IR Deck 분석
+// ──────────────────────────────────────────
+
+model IRDeck {
+  id String @id @default(uuid())
+
+  pitchId String
+  pitch   Pitch  @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+
+  noticeId String?
+  notice   Notice? @relation(fields: [noticeId], references: [id], onDelete: SetNull)
+
+  pdfUrl          String
+  pdfSizeBytes    BigInt?
+  pdfUploadStatus PdfUploadStatus?
+
+  totalScore        Int?
+  presentationGuide String?
+  timeAllocation    String?
+  emphasizedSlides  String?
+  improvedItems     String?
+
+  version  Int     @default(1)
+  isLatest Boolean @default(true)
+
+  analysisStatus NoticeAnalysisStatus @default(PENDING)
+  errorMessage   String?
+  analyzedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  slides     Slide[]
+  deckScore  DeckScore?
+  rehearsals Rehearsal[]
+  reports    Report[]
+
+  @@index([pitchId])
+  @@index([noticeId])
+  @@index([pitchId, version])
+  @@index([pitchId, isLatest])
+}
+
+model Slide {
+  id String @id @default(uuid())
+
+  irDeckId String
+  irDeck   IRDeck @relation(fields: [irDeckId], references: [id], onDelete: Cascade)
+
+  slideNumber    Int
+  category       String?
+  thumbnailUrl   String?
+  contentSummary String?
+  score          Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  feedback              SlideFeedback?
+  rehearsalSlideAnalyses RehearsalSlideAnalysis[]
+
+  @@unique([irDeckId, slideNumber])
+  @@index([irDeckId])
+}
+
+model SlideFeedback {
+  id String @id @default(uuid())
+
+  slideId String @unique
+  slide   Slide  @relation(fields: [slideId], references: [id], onDelete: Cascade)
+
+  detailedFeedback String?
+  strengths        String?
+  improvements     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model DeckScore {
+  id String @id @default(uuid())
+
+  irDeckId String @unique
+  irDeck   IRDeck @relation(fields: [irDeckId], references: [id], onDelete: Cascade)
+
+  totalScore       Int
+  structureSummary String?
+  strengths        String?
+  improvements     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  criteriaScores CriteriaScore[]
+}
+
+model CriteriaScore {
+  id String @id @default(uuid())
+
+  deckScoreId String
+  deckScore   DeckScore @relation(fields: [deckScoreId], references: [id], onDelete: Cascade)
+
+  criteriaId String?
+  criteria   NoticeEvaluationCriteria? @relation(fields: [criteriaId], references: [id], onDelete: SetNull)
+
+  criteriaName             String
+  pitchcoachInterpretation String?
+  irGuide                  String?
+  score                    Int
+  maxScore                 Int
+  isCovered                Boolean
+  feedback                 String?
+  relatedSlides            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deckScoreId])
+}
+
+// ──────────────────────────────────────────
+// 5. 리허설
+// ──────────────────────────────────────────
+
+model Rehearsal {
+  id String @id @default(uuid())
+
+  pitchId String
+  pitch   Pitch  @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+
+  irDeckId String?
+  irDeck   IRDeck? @relation(fields: [irDeckId], references: [id], onDelete: SetNull)
+
+  rehearsalNumber      Int
+  isLatest             Boolean  @default(true)
+  audioFileUrl         String
+  audioDurationSeconds Int?
+  audioDurationDisplay String?
+  audioFormat          String?
+  wpm                  Int?
+  transcription        String?
+  totalScore           Int?
+  structureSummary     String?
+  overallStrengths     String?
+  overallImprovements  String?
+  improvedItems        String?
+
+  analysisStatus NoticeAnalysisStatus @default(PENDING)
+  errorMessage   String?
+  analyzedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  detailScores      RehearsalDetailScore[]
+  deliveryAnalyses  RehearsalDeliveryAnalysis[]
+  slideAnalyses     RehearsalSlideAnalysis[]
+  qaTraining        QATraining?
+  reports           Report[]
+
+  @@unique([pitchId, rehearsalNumber])
+  @@index([pitchId])
+  @@index([irDeckId])
+  @@index([pitchId, isLatest])
+}
+
+model RehearsalDetailScore {
+  id String @id @default(uuid())
+
+  rehearsalId String
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+
+  categoryName        String
+  categoryDisplayName String
+  score               Int
+  maxScore            Int
+  feedback            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([rehearsalId, categoryName])
+  @@index([rehearsalId])
+}
+
+model RehearsalDeliveryAnalysis {
+  id String @id @default(uuid())
+
+  rehearsalId String
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+
+  categoryName        String
+  categoryDisplayName String
+  score               Int?
+  feedback            String?
+  metricValue         String?
+  metricLabel         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([rehearsalId, categoryName])
+  @@index([rehearsalId])
+}
+
+model RehearsalSlideAnalysis {
+  id String @id @default(uuid())
+
+  rehearsalId String
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+
+  slideId String?
+  slide   Slide?  @relation(fields: [slideId], references: [id], onDelete: SetNull)
+
+  slideNumber      Int
+  startTimestamp   Float
+  endTimestamp     Float
+  durationSeconds  Int
+  durationDisplay  String?
+  score            Int?
+  transcription    String?
+  contentSummary   String?
+  detailedFeedback String?
+  strengths        String?
+  improvements     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([rehearsalId, slideNumber])
+  @@index([rehearsalId])
+  @@index([slideId])
+}
+
+model QATraining {
+  id String @id @default(uuid())
+
+  rehearsalId String    @unique
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+
+  mode           String
+  totalQuestions Int    @default(5)
+  totalScore     Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  questions QAQuestion[]
+
+  @@index([rehearsalId])
+}
+
+model QAQuestion {
+  id String @id @default(uuid())
+
+  qaTrainingId String
+  qaTraining   QATraining @relation(fields: [qaTrainingId], references: [id], onDelete: Cascade)
+
+  category     String
+  question     String
+  answerGuide  String
+  displayOrder Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  answer QAAnswer?
+
+  @@index([qaTrainingId])
+}
+
+model QAAnswer {
+  id String @id @default(uuid())
+
+  questionId String     @unique
+  question   QAQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  audioFileUrl   String?
+  transcription  String?
+  briefnessScore Int?
+  evidenceScore  Int?
+  structureScore Int?
+  strengths      String?
+  weaknesses     String?
+  answeredAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────
+// 6. 최종 리포트
+// ──────────────────────────────────────────
+
+model Report {
+  id String @id @default(uuid())
+
+  pitchId String @unique
+  pitch   Pitch  @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+
+  noticeId String?
+  notice   Notice? @relation(fields: [noticeId], references: [id], onDelete: SetNull)
+
+  irDeckId String?
+  irDeck   IRDeck? @relation(fields: [irDeckId], references: [id], onDelete: SetNull)
+
+  rehearsalId String?
+  rehearsal   Rehearsal? @relation(fields: [rehearsalId], references: [id], onDelete: SetNull)
+
+  noticeSummary String?
+  noticeScore   Int?
+  irDeckSummary String?
+  irDeckScore   Int?
+  voiceSummary  String?
+  voiceScore    Int?
+  qaSummary     String?
+  qaScore       Int?
+  finalScore    Int
+  chartData     String?
+
+  generatedAt DateTime
+  updatedAt   DateTime @updatedAt
+
+  @@index([pitchId])
+  @@index([noticeId])
+  @@index([irDeckId])
+  @@index([rehearsalId])
 }

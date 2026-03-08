@@ -6,6 +6,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { UserService } from './user.service';
 import {
   ApiOperation,
@@ -17,6 +18,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileResponseDto } from './dto/update-profile-response.dto';
+
+interface AuthenticatedRequest extends Request {
+  user: { id: string };
+}
 
 @Controller('api/users')
 export class UserController {
@@ -37,7 +42,7 @@ export class UserController {
     description: 'UNAUTHORIZED',
   })
   async updateProfile(
-    @Req() req,
+    @Req() req: AuthenticatedRequest,
     @Body() dto: UpdateProfileDto,
   ) {
     return this.userService.updateProfile(req.user.id, dto);
@@ -60,7 +65,7 @@ export class UserController {
     status: 401,
     description: 'UNAUTHORIZED',
   })
-  async deleteMe(@Req() req) {
+  async deleteMe(@Req() req: AuthenticatedRequest) {
     return this.userService.deleteUser(req.user.id);
   }
 
@@ -82,10 +87,9 @@ export class UserController {
     description: 'UNAUTHORIZED',
   })
   async changePassword(
-    @Req() req,
+    @Req() req: AuthenticatedRequest,
     @Body() dto: ChangePasswordDto,
   ) {
     return this.userService.changePassword(req.user.id, dto);
   }
-
 }
