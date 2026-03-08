@@ -5,8 +5,8 @@ import { UserModule } from './modules/user/user.module';
 import { AiModule } from './modules/ai/ai.module';
 import { FastApiModule } from './infra/fastapi/fastapi.module';
 import { AuthModule } from './modules/auth/auth.module';
-
-
+import { NoticeModule } from './modules/notice/notice.module';
+import { PitchModule } from './modules/pitch/pitch.module';
 
 @Module({
   imports: [
@@ -18,6 +18,8 @@ import { AuthModule } from './modules/auth/auth.module';
     AiModule,
     FastApiModule,
     AuthModule,
+    NoticeModule,
+    PitchModule,
   ],
 })
 export class AppModule {}

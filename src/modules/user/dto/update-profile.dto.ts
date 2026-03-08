@@ -3,7 +3,6 @@ import { Gender } from '@prisma/client';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateProfileDto {
-
   @ApiPropertyOptional({
     description: '이름 (선택)',
     example: '홍길동',
@@ -11,7 +10,6 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   name?: string;
-
 
   @ApiPropertyOptional({
     description: '전화번호 (선택) - 010-1234-5678 형식',
@@ -24,7 +22,6 @@ export class UpdateProfileDto {
   })
   phone?: string;
 
-
   @ApiPropertyOptional({
     description: '성별 (선택) - MALE | FEMALE',
     enum: Gender,
@@ -34,7 +31,6 @@ export class UpdateProfileDto {
   @IsEnum(Gender)
   gender?: Gender;
 
-
   @ApiPropertyOptional({
     description: '최종 학력 (선택)',
     example: '대학원 졸업',
@@ -43,7 +39,6 @@ export class UpdateProfileDto {
   @IsString()
   education?: string;
 
-
   @ApiPropertyOptional({
     description: '창업 분야 (선택) - 드롭다운 선택 또는 직접 입력 값',
     example: 'AI/IT',
@@ -51,7 +46,6 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   business_field?: string;
-
 
   @ApiPropertyOptional({
     description: '창업 기간 (선택) - 드롭다운 선택 또는 직접 입력 값',

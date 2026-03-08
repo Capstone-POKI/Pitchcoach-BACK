@@ -1,5 +1,14 @@
-import {Controller, Post, Body, Get, UseGuards, Req, Res, } from '@nestjs/common';
-import { ApiBadRequestResponse,
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  UseGuards,
+  Req,
+  Res,
+} from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
   ApiConflictResponse,
@@ -81,7 +90,6 @@ export class AuthController {
     return this.authService.signup(dto);
   }
 
-
   @Post('login')
   @ApiOperation({ summary: '이메일 로그인' })
   @ApiBody({ type: LoginDto })
@@ -110,7 +118,6 @@ export class AuthController {
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
   }
-
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
@@ -180,8 +187,7 @@ export class AuthController {
         {
           example: {
             error: 'REFRESH_TOKEN_EXPIRED',
-            message:
-              '리프레시 토큰이 만료되었습니다. 다시 로그인해주세요.',
+            message: '리프레시 토큰이 만료되었습니다. 다시 로그인해주세요.',
           },
         },
       ],
@@ -207,14 +213,8 @@ export class AuthController {
   @ApiUnauthorizedResponse({
     description: '리프레시 토큰 오류',
   })
-  logout(
-    @Req() req: AuthenticatedRequest,
-    @Body() dto: LogoutDto,
-  ) {
-    return this.authService.logout(
-      req.user.id,
-      dto.refresh_token,
-    );
+  logout(@Req() req: AuthenticatedRequest, @Body() dto: LogoutDto) {
+    return this.authService.logout(req.user.id, dto.refresh_token);
   }
 
   @Post('google')
@@ -239,8 +239,7 @@ export class AuthController {
         is_profile_complete: false,
         access_token: result.accessToken,
         refresh_token: result.refreshToken,
-        message:
-          '회원가입이 완료되었습니다. 추가 정보를 입력해주세요.',
+        message: '회원가입이 완료되었습니다. 추가 정보를 입력해주세요.',
       };
     }
 
@@ -254,5 +253,4 @@ export class AuthController {
       refresh_token: result.refreshToken,
     };
   }
-
 }

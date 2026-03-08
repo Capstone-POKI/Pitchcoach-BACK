@@ -4,7 +4,7 @@ import { AiController } from './ai.controller';
 import { FastApiModule } from '../../infra/fastapi/fastapi.module';
 
 @Module({
-  imports: [FastApiModule],   // 👈 이거 반드시 추가
+  imports: [FastApiModule], // 👈 이거 반드시 추가
   controllers: [AiController],
   providers: [AiService],
 })

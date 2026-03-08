@@ -2,7 +2,6 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
 
 export class UpdateProfileResponseDto {
-
   @ApiProperty({ example: 'uuid-user-1' })
   user_id: string;
 
