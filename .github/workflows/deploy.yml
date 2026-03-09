@@ -22,6 +22,7 @@ jobs:
             git fetch origin main
             git checkout main
             git pull --ff-only origin main
+            cp deploy/docker-compose.ec2.yml ~/docker-compose.yml
             cd ~
             docker compose -f docker-compose.yml config -q
             docker compose -f docker-compose.yml up -d --build nestjs
