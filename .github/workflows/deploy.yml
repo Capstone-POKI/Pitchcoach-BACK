@@ -20,6 +20,7 @@ jobs:
           script: |
             sudo fuser -k 8000/tcp || true
             sudo fuser -k 3000/tcp || true
+            docker rm -f $(docker ps -aq) || true
             cd ~/Pitchcoach-BACK
             git fetch origin main
             git checkout main
