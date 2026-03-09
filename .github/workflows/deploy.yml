@@ -19,6 +19,9 @@ jobs:
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           script: |
             cd ~/Pitchcoach-BACK
-            git pull origin main
-            docker compose -f docker-compose.yml down
-            docker compose -f docker-compose.yml up -d --build
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+            cd ~
+            docker compose -f docker-compose.yml config -q
+            docker compose -f docker-compose.yml up -d --build nestjs
