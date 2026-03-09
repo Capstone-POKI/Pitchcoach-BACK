@@ -25,4 +25,5 @@ jobs:
             cp deploy/docker-compose.ec2.yml ~/docker-compose.yml
             cd ~
             docker compose -f docker-compose.yml config -q
-            docker compose -f docker-compose.yml up -d --build nestjs
+            docker compose -f docker-compose.yml down --remove-orphans
+            docker compose -f docker-compose.yml up -d --build
