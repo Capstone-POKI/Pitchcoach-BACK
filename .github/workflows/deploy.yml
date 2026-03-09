@@ -19,7 +19,6 @@ jobs:
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           script: |
             cd ~/Pitchcoach-BACK
-            git pull
-            cd ~
-            docker compose down
-            docker compose up -d --build
+            git pull origin main
+            docker compose -f docker-compose.yml down
+            docker compose -f docker-compose.yml up -d --build
