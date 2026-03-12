@@ -1,7 +1,7 @@
 # POKI Backend
 
 NestJS + Prisma 기반 백엔드입니다.
-현재 구현의 중심은 `Auth`이며, Swagger에는 `Auth API`만 노출되도록 설정되어 있습니다.
+현재는 `Auth`, `User`, `Pitch`, `Notice` API가 구현되어 있으며, AI 분석은 별도 FastAPI 서비스와 연동합니다.
 
 ## 1) Tech Stack
 - Node.js 20
@@ -16,15 +16,21 @@ NestJS + Prisma 기반 백엔드입니다.
 - `src/main.ts`
   - 전역 `ValidationPipe` 적용 (`whitelist`, `forbidNonWhitelisted`, `transform`)
   - 전역 `GlobalExceptionFilter` 적용
-  - Swagger 문서 생성 (`include: [AuthModule]`)
+  - Swagger 문서 생성 (`include: [AuthModule, UserModule, NoticeModule, PitchModule]`)
 - `src/app.module.ts`
-  - `ConfigModule`, `PrismaModule`, `AuthModule`, `UserModule`, `AiModule`, `FastApiModule` 등록
+  - `ConfigModule`, `PrismaModule`, `AuthModule`, `UserModule`, `AiModule`, `FastApiModule`, `NoticeModule`, `PitchModule` 등록
 - `src/modules/auth`
   - `AuthController`: `/api/auth/signup`, `/api/auth/login`, `/api/auth/me`
   - `AuthService`: 회원가입/로그인, bcrypt 해시, JWT 발급, refresh token hash 저장
   - `JwtStrategy`: access token 검증 + 삭제 유저/refresh 토큰 차단
 - `src/modules/user`
-  - `GET /users` (Swagger에는 미노출)
+  - 사용자 조회/프로필 관련 API
+- `src/modules/pitch`
+  - `POST /api/pitches`
+- `src/modules/notice`
+  - `POST /api/pitches/:pitchId/notices/analyze`
+  - `GET /api/notices/:noticeId`
+  - `PATCH /api/notices/:noticeId`
 - `src/modules/ai`
   - `GET /ai/test` (Swagger에는 미노출)
 - `src/infra/prisma`
@@ -48,7 +54,7 @@ PORT=3000
 
 주의:
 - `JWT_SECRET` 누락 시 앱이 시작 단계에서 에러로 종료됩니다.
-- `AI_SERVER_URL`은 `GET /ai/test` 호출 시 사용됩니다.
+- `AI_SERVER_URL`은 `GET /ai/test` 및 Notice 분석 연동 호출에 사용됩니다.
 
 ## 4) Local Setup
 ```bash
@@ -63,15 +69,15 @@ pnpm run start:dev
 - Swagger: `http://localhost:3000/api-docs`
 
 ## 5) Swagger Policy
-현재 Swagger는 Auth만 노출합니다.
+현재 Swagger에는 `Auth`, `User`, `Notice`, `Pitch` 모듈이 노출됩니다.
 
 ```ts
 SwaggerModule.createDocument(app, config, {
-  include: [AuthModule],
+  include: [AuthModule, UserModule, NoticeModule, PitchModule],
 });
 ```
 
-즉, `users`, `ai` API는 실제로 호출 가능하지만 문서에는 표시되지 않습니다.
+즉, `ai` API는 실제로 호출 가능하지만 문서에는 표시되지 않습니다.
 
 ## 6) API Overview
 
@@ -165,9 +171,49 @@ Request body:
 실패 케이스:
 - `401 UNAUTHORIZED`
 
-### 6.2 기타 API (Swagger 미노출)
+### 6.2 Pitch (Swagger 노출)
+- `POST /api/pitches`
+
+Request body:
+```json
+{
+  "title": "2026 정부지원사업 발표",
+  "pitch_type": "GOVERNMENT",
+  "duration_minutes": 10,
+  "notice_type": "PDF"
+}
+```
+
+성공 응답 예시:
+```json
+{
+  "pitch_id": "uuid",
+  "title": "2026 정부지원사업 발표",
+  "pitch_type": "GOVERNMENT",
+  "duration_minutes": 10,
+  "status": "SETUP",
+  "progress_percentage": 0,
+  "has_notice": true,
+  "notice_type": "PDF",
+  "ir_template_key": "GOV_RFP",
+  "next_step": "NOTICE_UPLOAD",
+  "created_at": "2026-03-12T00:00:00.000Z"
+}
+```
+
+### 6.3 Notice (Swagger 노출)
+- `POST /api/pitches/:pitchId/notices/analyze`
+- `GET /api/notices/:noticeId`
+- `PATCH /api/notices/:noticeId`
+
+설명:
+- Notice 메타데이터와 심사 기준은 PostgreSQL에 저장합니다.
+- PDF 분석 자체는 `AI_SERVER_URL`로 연결된 FastAPI 서비스에 위임합니다.
+- 조회 시 분석이 진행 중이면 AI 결과를 polling 동기화합니다.
+
+### 6.4 기타 API
 - `GET /users`
-- `GET /ai/test`
+- `GET /ai/test` (`Swagger` 미노출)
 
 ## 7) Validation Rules
 
@@ -245,8 +291,8 @@ pnpm run test:e2e
 4. `pnpm run build`
 
 ## 13) Common Issues
-- Swagger에 users/ai가 안 보임
-  - 정상입니다. 현재 문서 노출 범위를 `AuthModule`로 제한했습니다.
+- Swagger에 `ai`가 안 보임
+  - 정상입니다. 현재 문서 노출 범위는 `AuthModule`, `UserModule`, `NoticeModule`, `PitchModule`입니다.
 - `JWT_SECRET is required`로 서버가 시작 실패
   - `.env`에 `JWT_SECRET`을 설정하세요.
 - Prisma 타입 오류

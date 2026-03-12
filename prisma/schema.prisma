@@ -214,7 +214,7 @@ model IRDeck {
   noticeId String?
   notice   Notice? @relation(fields: [noticeId], references: [id], onDelete: SetNull)
 
-  pdfUrl          String
+  pdfUrl          String?
   pdfSizeBytes    BigInt?
   pdfUploadStatus PdfUploadStatus?
 

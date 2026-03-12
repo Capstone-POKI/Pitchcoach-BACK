@@ -25,9 +25,16 @@ describe('Auth flow', () => {
       key === 'JWT_SECRET' ? jwtSecret : undefined,
     ),
   };
+  const googleAuthService = {
+    verifyIdToken: jest.fn(),
+  };
 
   const jwtService = new JwtService({ secret: jwtSecret });
-  const authService = new AuthService(prisma as any, jwtService);
+  const authService = new AuthService(
+    prisma as any,
+    jwtService,
+    googleAuthService as any,
+  );
   const authController = new AuthController(authService);
   const jwtStrategy = new JwtStrategy(prisma as any, configService as any);
 
