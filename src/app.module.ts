@@ -6,6 +6,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { FastApiModule } from './infra/fastapi/fastapi.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { NoticeModule } from './modules/notice/notice.module';
+import { DeckModule } from './modules/deck/deck.module';
 import { PitchModule } from './modules/pitch/pitch.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { PitchModule } from './modules/pitch/pitch.module';
     FastApiModule,
     AuthModule,
     NoticeModule,
+    DeckModule,
     PitchModule,
   ],
 })

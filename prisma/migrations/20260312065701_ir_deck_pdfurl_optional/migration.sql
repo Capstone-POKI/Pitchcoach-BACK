@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "IRDeck" ALTER COLUMN "pdfUrl" DROP NOT NULL;

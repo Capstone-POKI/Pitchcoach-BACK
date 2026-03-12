@@ -6,6 +6,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { NoticeModule } from './modules/notice/notice.module';
+import { DeckModule } from './modules/deck/deck.module';
 import { PitchModule } from './modules/pitch/pitch.module';
 
 async function bootstrap() {
@@ -29,7 +30,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config, {
-    include: [AuthModule, UserModule, NoticeModule, PitchModule],
+    include: [AuthModule, UserModule, NoticeModule, DeckModule, PitchModule],
   });
   SwaggerModule.setup('api-docs', app, document);
 
