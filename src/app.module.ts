@@ -8,6 +8,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { NoticeModule } from './modules/notice/notice.module';
 import { DeckModule } from './modules/deck/deck.module';
 import { PitchModule } from './modules/pitch/pitch.module';
+import { RehearsalModule } from './modules/rehearsal/rehearsal.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { PitchModule } from './modules/pitch/pitch.module';
     NoticeModule,
     DeckModule,
     PitchModule,
+    RehearsalModule,
   ],
 })
 export class AppModule {}
