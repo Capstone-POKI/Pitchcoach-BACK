@@ -8,6 +8,7 @@ import { UserModule } from './modules/user/user.module';
 import { NoticeModule } from './modules/notice/notice.module';
 import { DeckModule } from './modules/deck/deck.module';
 import { PitchModule } from './modules/pitch/pitch.module';
+import { RehearsalModule } from './modules/rehearsal/rehearsal.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -30,7 +31,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config, {
-    include: [AuthModule, UserModule, NoticeModule, DeckModule, PitchModule],
+    include: [AuthModule, UserModule, NoticeModule, DeckModule, PitchModule, RehearsalModule],
   });
   SwaggerModule.setup('api-docs', app, document);
 
