@@ -417,6 +417,7 @@ model RehearsalSlideAnalysis {
   slide   Slide?  @relation(fields: [slideId], references: [id], onDelete: SetNull)
 
   slideNumber      Int
+  category         String?
   startTimestamp   Float
   endTimestamp     Float
   durationSeconds  Int

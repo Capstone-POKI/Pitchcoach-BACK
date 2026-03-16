@@ -108,6 +108,76 @@ export interface AiIrSlidesResponse {
   slides?: AiIrSlideItem[];
 }
 
+export interface AiPitchContext {
+  pitch_id: string;
+  pitch_type: string;
+  duration_minutes?: number | null;
+}
+
+export interface AiNoticeContextItem {
+  criteria_name: string;
+  points?: number;
+  pitchcoach_interpretation?: string;
+  ir_guide?: string;
+}
+
+export interface AiNoticeContext {
+  notice_id?: string | null;
+  notice_name?: string | null;
+  recruitment_type?: string | null;
+  target_audience?: string | null;
+  application_period?: string | null;
+  summary?: string | null;
+  core_requirements?: string | null;
+  additional_criteria?: string | null;
+  ir_deck_guide?: string | null;
+  evaluation_criteria?: AiNoticeContextItem[];
+}
+
+export interface AiVoiceDeckSlideContext {
+  slide_number: number;
+  category: string;
+  content_summary: string;
+}
+
+export interface AiVoiceDeckCriteriaContext {
+  criteria_name: string;
+  pitchcoach_interpretation?: string;
+  ir_guide?: string;
+  score?: number;
+  feedback?: string;
+  related_slides?: number[];
+}
+
+export interface AiVoiceDeckContext {
+  ir_deck_id: string;
+  version?: number;
+  deck_score?: {
+    total_score?: number;
+    structure_summary?: string;
+    strengths?: string[];
+    improvements?: string[];
+  };
+  criteria_scores?: AiVoiceDeckCriteriaContext[];
+  presentation_guide?: {
+    emphasized_slides?: AiEmphasizedSlide[];
+    guide?: string[];
+    time_allocation?: string[];
+  };
+  slides?: AiVoiceDeckSlideContext[];
+}
+
+export interface AiVoiceAnalyzeContext {
+  pitch: AiPitchContext;
+  notice?: AiNoticeContext | null;
+  ir_deck: AiVoiceDeckContext;
+}
+
+export interface AiVoiceAnalyzeOptions {
+  scenario?: string;
+  slide_timestamps?: object[];
+}
+
 @Injectable()
 export class FastApiClient {
   private readonly logger = new Logger(FastApiClient.name);
@@ -192,5 +262,74 @@ export class FastApiClient {
   async getIrDeckSlides(aiJobId: string): Promise<AiIrSlidesResponse> {
     const res = await axios.get(`${this.baseUrl}/api/ir-decks/${aiJobId}/slides`);
     return res.data as AiIrSlidesResponse;
+  }
+
+  private static getMimeType(filename: string): string {
+    const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+    const MIME_MAP: Record<string, string> = {
+      webm: 'audio/webm',
+      mp3: 'audio/mpeg',
+      m4a: 'audio/mp4',
+      wav: 'audio/wav',
+      ogg: 'audio/ogg',
+      mp4: 'video/mp4',
+    };
+    return MIME_MAP[ext] ?? 'audio/octet-stream';
+  }
+
+  async analyzeVoice(
+    pitchId: string,
+    fileBuffer: Buffer,
+    filename: string,
+    pitchType: string,
+    slideTimestamps?: object[],
+    context?: AiVoiceAnalyzeContext,
+    options?: AiVoiceAnalyzeOptions,
+  ): Promise<{
+    voice_id: string;
+    pitch_id: string;
+    analysis_status: string;
+    version: number;
+    message: string;
+  }> {
+    const form = new FormData();
+    form.append('file', fileBuffer, {
+      filename,
+      contentType: FastApiClient.getMimeType(filename),
+    });
+    form.append('pitch_type', pitchType);
+    if (slideTimestamps && slideTimestamps.length > 0) {
+      form.append('slide_timestamps', JSON.stringify(slideTimestamps));
+    }
+    if (context) {
+      form.append('context_json', JSON.stringify(context));
+    }
+    // options_json에는 scenario만 전달 (slide_timestamps는 Form 필드로 별도 전송)
+    const optionsToSend = options?.scenario ? { scenario: options.scenario } : null;
+    if (optionsToSend) {
+      form.append('options_json', JSON.stringify(optionsToSend));
+    }
+    const res = await axios.post(
+      `${this.baseUrl}/api/pitches/${pitchId}/voice/analyze`,
+      form,
+      { headers: form.getHeaders() },
+    );
+    return res.data as {
+      voice_id: string;
+      pitch_id: string;
+      analysis_status: string;
+      version: number;
+      message: string;
+    };
+  }
+
+  async getVoiceResult(voiceId: string): Promise<Record<string, unknown>> {
+    const res = await axios.get(`${this.baseUrl}/api/voice/${voiceId}`);
+    return res.data as Record<string, unknown>;
+  }
+
+  async getVoiceSlides(voiceId: string): Promise<Record<string, unknown>> {
+    const res = await axios.get(`${this.baseUrl}/api/voice/${voiceId}/slides`);
+    return res.data as Record<string, unknown>;
   }
 }
