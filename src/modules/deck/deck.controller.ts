@@ -26,6 +26,8 @@ import { DeckService } from './deck.service';
 import { UploadDeckResponseDto } from './dto/upload-deck.response.dto';
 import { DeckSummaryCompletedResponseDto } from './dto/deck-summary.response.dto';
 import { DeckSlidesCompletedResponseDto } from './dto/deck-slides.response.dto';
+import { DeckVersionsResponseDto } from './dto/deck-versions.response.dto';
+import { DeckCompareResponseDto } from './dto/deck-compare.response.dto';
 
 interface AuthenticatedRequest extends Request {
   user: { id: string };
@@ -112,5 +114,44 @@ export class DeckController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.deckService.getIrDeckSlides(deckId, req.user.id);
+  }
+
+  @Get('pitches/:pitchId/ir-decks/versions')
+  @ApiOperation({ summary: 'IR Deck 버전 목록 조회' })
+  @ApiParam({ name: 'pitchId', description: 'Pitch ID' })
+  @ApiResponse({ status: 200, type: DeckVersionsResponseDto })
+  @ApiResponse({
+    status: 404,
+    schema: { example: { error: 'PITCH_NOT_FOUND' } },
+  })
+  @ApiResponse({
+    status: 404,
+    schema: {
+      example: {
+        error: 'NO_IR_DECKS',
+        message: 'IR Deck 분석 이력이 없습니다.',
+      },
+    },
+  })
+  getIrDeckVersions(
+    @Param('pitchId') pitchId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<DeckVersionsResponseDto> {
+    return this.deckService.getIrDeckVersions(pitchId, req.user.id);
+  }
+
+  @Get('ir-decks/:deckId/compare')
+  @ApiOperation({ summary: 'IR Deck 현재 버전과 직전 버전 비교' })
+  @ApiParam({ name: 'deckId', description: '현재 IR Deck ID' })
+  @ApiResponse({ status: 200, type: DeckCompareResponseDto })
+  @ApiResponse({
+    status: 404,
+    schema: { example: { error: 'IR_DECK_NOT_FOUND' } },
+  })
+  getIrDeckCompare(
+    @Param('deckId') deckId: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<DeckCompareResponseDto> {
+    return this.deckService.getIrDeckCompare(deckId, req.user.id);
   }
 }
