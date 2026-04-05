@@ -182,6 +182,7 @@ export class RehearsalService {
 
   // ──────────────────────────────────────────
   // POST /api/pitches/:pitchId/rehearsals
+  // POST /api/pitches/:pitchId/voice/upload-and-analyze
   // ──────────────────────────────────────────
   async uploadAndAnalyze(
     pitchId: string,
@@ -320,6 +321,7 @@ export class RehearsalService {
 
   // ──────────────────────────────────────────
   // GET /api/rehearsals/:voiceId
+  // GET /api/voice/:voiceId
   // ──────────────────────────────────────────
   async getRehearsalResult(rehearsalId: string, userId: string) {
     const rehearsal = await this.prisma.rehearsal.findUnique({
@@ -401,6 +403,7 @@ export class RehearsalService {
 
   // ──────────────────────────────────────────
   // GET /api/rehearsals/:voiceId/slides
+  // GET /api/voice/:voiceId/slides
   // ──────────────────────────────────────────
   async getRehearsalSlides(rehearsalId: string, userId: string) {
     const rehearsal = await this.prisma.rehearsal.findUnique({

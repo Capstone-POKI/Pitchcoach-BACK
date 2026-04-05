@@ -217,7 +217,7 @@ export class AuthController {
     return this.authService.logout(req.user.id, dto.refresh_token);
   }
 
-  @Post('google')
+  @Post(['google', 'login/google'])
   @ApiOperation({ summary: '구글 로그인' })
   @ApiBody({ type: GoogleLoginDto })
   @ApiUnauthorizedResponse({
