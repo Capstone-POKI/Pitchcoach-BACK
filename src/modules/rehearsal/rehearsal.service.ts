@@ -23,6 +23,7 @@ const ALLOWED_MIMETYPES = new Set([
   'video/webm',
 ]);
 const ALLOWED_EXTENSIONS = new Set(['.webm', '.mp3', '.m4a', '.wav', '.ogg', '.mp4']);
+const MAX_REHEARSAL_VERSIONS = 6;
 
 // In-memory map: rehearsalId → AI voice_id
 const aiVoiceIdMap = new Map<string, string>();
@@ -35,6 +36,30 @@ function safeJsonArray(value: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+function safeStringList(value: string | null | undefined): string[] {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string');
+    }
+    if (typeof parsed === 'string') {
+      return parsed
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+  } catch {
+    // Fall through to plain string parsing.
+  }
+
+  return value
+    .split(/\r?\n|[•·▪*-]\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
@@ -453,6 +478,172 @@ export class RehearsalService {
         strengths: safeJsonArray(s.strengths),
         improvements: safeJsonArray(s.improvements),
       })),
+    };
+  }
+
+  async getRehearsalVersions(pitchId: string, userId: string) {
+    const pitch = await this.prisma.pitch.findUnique({
+      where: { id: pitchId },
+      select: { id: true, userId: true, isDeleted: true },
+    });
+
+    if (!pitch || pitch.isDeleted) {
+      throw new NotFoundException({ error: 'PITCH_NOT_FOUND' });
+    }
+    if (pitch.userId !== userId) {
+      throw new ForbiddenException({ error: 'FORBIDDEN' });
+    }
+
+    const totalVersions = await this.prisma.rehearsal.count({
+      where: { pitchId },
+    });
+
+    if (totalVersions === 0) {
+      throw new NotFoundException({
+        error: 'NO_VOICE_ANALYSES',
+        message: '음성 분석 이력이 없습니다.',
+      });
+    }
+
+    const versions = await this.prisma.rehearsal.findMany({
+      where: { pitchId },
+      orderBy: { rehearsalNumber: 'desc' },
+      take: MAX_REHEARSAL_VERSIONS,
+      select: {
+        id: true,
+        rehearsalNumber: true,
+        isLatest: true,
+        totalScore: true,
+        wpm: true,
+        audioDurationSeconds: true,
+        audioDurationDisplay: true,
+        audioFileUrl: true,
+        analysisStatus: true,
+        analyzedAt: true,
+      },
+    });
+
+    return {
+      pitch_id: pitchId,
+      total_versions: totalVersions,
+      versions: versions.map((version) => ({
+        voice_id: version.id,
+        version: version.rehearsalNumber,
+        is_latest: version.isLatest,
+        total_score: version.totalScore,
+        wpm: version.wpm,
+        audio_duration_seconds: version.audioDurationSeconds,
+        audio_duration_display: version.audioDurationDisplay,
+        audio_file_url: version.audioFileUrl,
+        analysis_status: version.analysisStatus,
+        analyzed_at: version.analyzedAt?.toISOString() ?? null,
+      })),
+    };
+  }
+
+  async getRehearsalCompare(voiceId: string, userId: string) {
+    const current = await this.prisma.rehearsal.findUnique({
+      where: { id: voiceId },
+      include: {
+        pitch: { select: { userId: true } },
+        detailScores: { orderBy: { categoryName: 'asc' } },
+        slideAnalyses: { orderBy: { slideNumber: 'asc' } },
+      },
+    });
+
+    if (!current) {
+      throw new NotFoundException({ error: 'VOICE_NOT_FOUND' });
+    }
+    if (current.pitch.userId !== userId) {
+      throw new ForbiddenException({ error: 'FORBIDDEN' });
+    }
+
+    const previous = await this.prisma.rehearsal.findFirst({
+      where: {
+        pitchId: current.pitchId,
+        rehearsalNumber: { lt: current.rehearsalNumber },
+      },
+      orderBy: { rehearsalNumber: 'desc' },
+      include: {
+        detailScores: true,
+        slideAnalyses: true,
+      },
+    });
+
+    const previousDetailScoreMap = new Map(
+      (previous?.detailScores ?? []).map((score) => [
+        score.categoryName,
+        score,
+      ]),
+    );
+    const previousSlideScoreMap = new Map(
+      (previous?.slideAnalyses ?? []).map((slide) => [
+        slide.slideNumber,
+        slide.score,
+      ]),
+    );
+    const improvedItems = safeStringList(current.improvedItems);
+    const fallbackImprovedItems = safeStringList(current.overallImprovements);
+
+    return {
+      current: {
+        voice_id: current.id,
+        version: current.rehearsalNumber,
+        total_score: current.totalScore,
+        wpm: current.wpm,
+        audio_duration_display: current.audioDurationDisplay,
+        analyzed_at: current.analyzedAt?.toISOString() ?? null,
+      },
+      previous: previous
+        ? {
+            voice_id: previous.id,
+            version: previous.rehearsalNumber,
+            total_score: previous.totalScore,
+            wpm: previous.wpm,
+            audio_duration_display: previous.audioDurationDisplay,
+            analyzed_at: previous.analyzedAt?.toISOString() ?? null,
+          }
+        : null,
+      score_diff:
+        previous &&
+        current.totalScore !== null &&
+        previous.totalScore !== null
+          ? current.totalScore - previous.totalScore
+          : null,
+      detail_score_comparisons: previous
+        ? current.detailScores.map((score) => {
+            const previousScore =
+              previousDetailScoreMap.get(score.categoryName) ?? null;
+            return {
+              category_name: score.categoryName,
+              category_display_name: score.categoryDisplayName,
+              current_score: score.score,
+              previous_score: previousScore?.score ?? null,
+              diff:
+                previousScore?.score == null
+                  ? null
+                  : score.score - previousScore.score,
+            };
+          })
+        : [],
+      slide_comparisons: previous
+        ? current.slideAnalyses.map((slide) => {
+            const currentScore = slide.score ?? 0;
+            const previousScore = previousSlideScoreMap.has(slide.slideNumber)
+              ? (previousSlideScoreMap.get(slide.slideNumber) ?? null)
+              : null;
+            return {
+              slide_number: slide.slideNumber,
+              category: slide.category ?? '',
+              current_score: currentScore,
+              previous_score: previousScore,
+              diff:
+                previousScore === null ? null : currentScore - previousScore,
+            };
+          })
+        : [],
+      improved_items:
+        improvedItems.length > 0 ? improvedItems : fallbackImprovedItems,
     };
   }
 
