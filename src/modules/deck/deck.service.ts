@@ -24,6 +24,30 @@ function safeJsonArray(value: string | null | undefined): string[] {
   }
 }
 
+function safeStringList(value: string | null | undefined): string[] {
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((item): item is string => typeof item === 'string');
+    }
+    if (typeof parsed === 'string') {
+      return parsed
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+  } catch {
+    // fall through to plain string parsing
+  }
+
+  return value
+    .split(/\r?\n|[•·▪*-]\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function safeJsonParse<T>(value: string | null | undefined, fallback: T): T {
   if (!value) return fallback;
   try {
@@ -520,6 +544,169 @@ export class DeckService {
     };
   }
 
+  async getIrDeckVersions(pitchId: string, userId: string) {
+    const pitch = await this.prisma.pitch.findUnique({
+      where: { id: pitchId },
+      select: { id: true, userId: true, isDeleted: true },
+    });
+
+    if (!pitch || pitch.isDeleted) {
+      throw new NotFoundException({
+        error: 'PITCH_NOT_FOUND',
+        message: '존재하지 않는 피칭입니다',
+      });
+    }
+    if (pitch.userId !== userId) {
+      throw new ForbiddenException({ error: 'FORBIDDEN' });
+    }
+
+    const versions = await this.prisma.iRDeck.findMany({
+      where: { pitchId },
+      orderBy: { version: 'desc' },
+      select: {
+        id: true,
+        version: true,
+        isLatest: true,
+        totalScore: true,
+        pdfUrl: true,
+        analysisStatus: true,
+        analyzedAt: true,
+        _count: {
+          select: {
+            slides: true,
+          },
+        },
+      },
+    });
+
+    if (versions.length === 0) {
+      throw new NotFoundException({
+        error: 'NO_IR_DECKS',
+        message: 'IR Deck 분석 이력이 없습니다.',
+      });
+    }
+
+    return {
+      pitch_id: pitchId,
+      total_versions: versions.length,
+      versions: versions.map((deck) => ({
+        ir_deck_id: deck.id,
+        version: deck.version,
+        is_latest: deck.isLatest,
+        total_score: deck.totalScore,
+        total_slides: deck._count.slides,
+        pdf_url: deck.pdfUrl,
+        analysis_status: deck.analysisStatus,
+        analyzed_at: deck.analyzedAt?.toISOString() ?? null,
+      })),
+    };
+  }
+
+  async getIrDeckCompare(deckId: string, userId: string) {
+    const currentDeck = await this.prisma.iRDeck.findUnique({
+      where: { id: deckId },
+      include: {
+        pitch: { select: { userId: true } },
+        deckScore: { select: { improvements: true } },
+        slides: {
+          select: {
+            slideNumber: true,
+            category: true,
+            score: true,
+          },
+          orderBy: { slideNumber: 'asc' },
+        },
+        _count: {
+          select: {
+            slides: true,
+          },
+        },
+      },
+    });
+
+    if (!currentDeck) {
+      throw new NotFoundException({ error: 'IR_DECK_NOT_FOUND' });
+    }
+    if (currentDeck.pitch.userId !== userId) {
+      throw new ForbiddenException({ error: 'FORBIDDEN' });
+    }
+
+    const previousDeck = await this.prisma.iRDeck.findFirst({
+      where: {
+        pitchId: currentDeck.pitchId,
+        version: { lt: currentDeck.version },
+      },
+      orderBy: { version: 'desc' },
+      include: {
+        slides: {
+          select: {
+            slideNumber: true,
+            score: true,
+          },
+        },
+        _count: {
+          select: {
+            slides: true,
+          },
+        },
+      },
+    });
+
+    const previousSlideScoreMap = new Map(
+      (previousDeck?.slides ?? []).map((slide) => [
+        slide.slideNumber,
+        slide.score,
+      ]),
+    );
+    const improvedItems = safeStringList(currentDeck.improvedItems);
+
+    return {
+      current: {
+        ir_deck_id: currentDeck.id,
+        version: currentDeck.version,
+        total_score: currentDeck.totalScore,
+        total_slides: currentDeck._count.slides,
+        analyzed_at: currentDeck.analyzedAt?.toISOString() ?? null,
+      },
+      previous: previousDeck
+        ? {
+            ir_deck_id: previousDeck.id,
+            version: previousDeck.version,
+            total_score: previousDeck.totalScore,
+            total_slides: previousDeck._count.slides,
+            analyzed_at: previousDeck.analyzedAt?.toISOString() ?? null,
+          }
+        : null,
+      score_diff:
+        previousDeck &&
+        currentDeck.totalScore !== null &&
+        previousDeck.totalScore !== null
+          ? currentDeck.totalScore - previousDeck.totalScore
+          : null,
+      slide_comparisons: previousDeck
+        ? currentDeck.slides.map((slide) => {
+            const previousScore = previousSlideScoreMap.has(slide.slideNumber)
+              ? (previousSlideScoreMap.get(slide.slideNumber) ?? null)
+              : null;
+            const currentScore = slide.score ?? 0;
+
+            return {
+              slide_number: slide.slideNumber,
+              category: slide.category ?? '',
+              current_score: currentScore,
+              previous_score: previousScore,
+              diff:
+                previousScore === null ? null : currentScore - previousScore,
+            };
+          })
+        : [],
+      improved_items:
+        improvedItems.length > 0
+          ? improvedItems
+          : safeStringList(currentDeck.deckScore?.improvements),
+    };
+  }
+
   // ──────────────────────────────────────────
   // Private: AI 비동기 호출
   // ──────────────────────────────────────────
@@ -598,6 +785,7 @@ export class DeckService {
               presentationGuide: JSON.stringify(pg.guide),
               timeAllocation: JSON.stringify(pg.time_allocation),
               emphasizedSlides: JSON.stringify(pg.emphasized_slides),
+              improvedItems: JSON.stringify(ds.improvements ?? []),
               analysisStatus: 'COMPLETED',
               pdfUploadStatus: 'COMPLETED',
               analyzedAt: summary.analyzed_at
