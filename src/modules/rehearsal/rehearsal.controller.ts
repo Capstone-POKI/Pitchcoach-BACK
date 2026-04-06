@@ -37,10 +37,7 @@ interface AuthenticatedRequest extends Request {
 export class RehearsalController {
   constructor(private readonly rehearsalService: RehearsalService) {}
 
-  @Post([
-    'pitches/:pitchId/rehearsals',
-    'pitches/:pitchId/voice/upload-and-analyze',
-  ])
+  @Post('pitches/:pitchId/voice/upload-and-analyze')
   @HttpCode(HttpStatus.ACCEPTED)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
@@ -63,7 +60,7 @@ export class RehearsalController {
     );
   }
 
-  @Get(['rehearsals/:voiceId', 'voice/:voiceId'])
+  @Get('voice/:voiceId')
   @ApiOperation({ summary: '음성 분석 결과 조회' })
   @ApiParam({ name: 'voiceId', description: 'Voice Analysis ID' })
   @ApiResponse({ status: 200, description: 'IN_PROGRESS | COMPLETED | FAILED' })
@@ -75,7 +72,7 @@ export class RehearsalController {
     return this.rehearsalService.getRehearsalResult(voiceId, req.user.id);
   }
 
-  @Get(['rehearsals/:voiceId/slides', 'voice/:voiceId/slides'])
+  @Get('voice/:voiceId/slides')
   @ApiOperation({ summary: '음성 분석 슬라이드별 결과 조회' })
   @ApiParam({ name: 'voiceId', description: 'Voice Analysis ID' })
   @ApiResponse({ status: 200, description: 'IN_PROGRESS | COMPLETED' })
