@@ -24,7 +24,7 @@ jobs:
             cd ~/Pitchcoach-BACK
             git fetch origin main
             git checkout main
-            git pull --ff-only origin main
+            git reset --hard origin/main
             cp deploy/docker-compose.ec2.yml ~/docker-compose.yml
             cd ~
             docker compose -f docker-compose.yml config -q
