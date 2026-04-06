@@ -13,6 +13,11 @@ import {
 } from '../../infra/fastapi/fastapi.client';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const IR_DECK_SYNC_INTERVAL_MS = Number(
+  process.env.IR_DECK_SYNC_INTERVAL_MS ?? 5000,
+);
+const IR_DECK_ANALYSIS_TIMEOUT_MS =
+  Number(process.env.IR_DECK_ANALYSIS_TIMEOUT_MINUTES ?? 15) * 60 * 1000;
 
 function safeJsonArray(value: string | null | undefined): string[] {
   if (!value) return [];
@@ -68,6 +73,7 @@ type CanonicalIrAxis =
 @Injectable()
 export class DeckService {
   private readonly logger = new Logger(DeckService.name);
+  private readonly activeDeckPollers = new Set<string>();
 
   constructor(
     private prisma: PrismaService,
@@ -725,12 +731,13 @@ export class DeckService {
         strategy,
         pitchType,
       )
-      .then((aiResult) =>
-        this.prisma.iRDeck.update({
+      .then(async (aiResult) => {
+        await this.prisma.iRDeck.update({
           where: { id: irDeckId },
           data: { pdfUrl: `ai://${aiResult.ir_deck_id}` },
-        }),
-      )
+        });
+        this.scheduleAiSync(irDeckId);
+      })
       .catch((err: Error) => {
         this.logger.error(`AI 서버 호출 실패: ${err.message}`);
         this.prisma.iRDeck
@@ -746,6 +753,63 @@ export class DeckService {
             this.logger.error(`DB 상태 갱신 실패: ${e.message}`),
           );
       });
+  }
+
+  private scheduleAiSync(irDeckId: string) {
+    if (this.activeDeckPollers.has(irDeckId)) {
+      return;
+    }
+
+    this.activeDeckPollers.add(irDeckId);
+    void this.pollAiUntilSettled(irDeckId).finally(() => {
+      this.activeDeckPollers.delete(irDeckId);
+    });
+  }
+
+  private async pollAiUntilSettled(irDeckId: string) {
+    for (;;) {
+      const irDeck = await this.prisma.iRDeck.findUnique({
+        where: { id: irDeckId },
+        select: {
+          id: true,
+          pitchId: true,
+          pdfUrl: true,
+          noticeId: true,
+          analysisStatus: true,
+          createdAt: true,
+        },
+      });
+
+      if (!irDeck || irDeck.analysisStatus !== 'IN_PROGRESS') {
+        return;
+      }
+
+      if (
+        Date.now() - irDeck.createdAt.getTime() >
+        IR_DECK_ANALYSIS_TIMEOUT_MS
+      ) {
+        await this.prisma.iRDeck.update({
+          where: { id: irDeckId },
+          data: {
+            analysisStatus: 'FAILED',
+            pdfUploadStatus: 'FAILED',
+            errorMessage: 'IR Deck 분석 시간이 초과되었습니다.',
+          },
+        });
+        return;
+      }
+
+      if (irDeck.pdfUrl?.startsWith('ai://')) {
+        const synced = await this.syncFromAi(irDeck);
+        if (synced) {
+          return;
+        }
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, IR_DECK_SYNC_INTERVAL_MS),
+      );
+    }
   }
 
   // ──────────────────────────────────────────
