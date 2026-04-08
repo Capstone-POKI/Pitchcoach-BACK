@@ -53,12 +53,14 @@ DATABASE_URL="postgresql://postgres:postgres@localhost:5432/poki?schema=public"
 JWT_SECRET="change-me"
 AI_SERVER_URL="http://localhost:8000"
 PORT=3000
+CORS_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:5500,http://127.0.0.1:5500,https://pitchcoach.duckdns.org"
 ```
 
 주의:
 
 - `JWT_SECRET` 누락 시 앱이 시작 단계에서 에러로 종료됩니다.
 - `AI_SERVER_URL`은 `GET /ai/test` 및 Notice 분석 연동 호출에 사용됩니다.
+- `CORS_ORIGINS`를 사용하면 브라우저에서 허용할 origin 목록을 쉼표로 지정할 수 있습니다.
 
 ## 4) Local Setup
 
