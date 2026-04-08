@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional } from 'class-validator';
 
 export enum QAModeEnum {
   REALTIME = 'REALTIME',
@@ -10,7 +10,8 @@ export class SetQAModeDto {
   @ApiProperty({
     enum: QAModeEnum,
     example: 'REALTIME',
-    description: 'Q&A 훈련 방식 (REALTIME: 실제 질문에 음성으로 답변, GUIDE_ONLY: 질문과 가이드만 확인)',
+    description:
+      'Q&A 훈련 방식 (REALTIME: 실제 질문에 음성으로 답변, GUIDE_ONLY: 질문과 가이드만 확인)',
   })
   @IsEnum(QAModeEnum)
   qa_mode: QAModeEnum;
