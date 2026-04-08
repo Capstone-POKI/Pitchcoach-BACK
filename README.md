@@ -4,6 +4,7 @@ NestJS + Prisma 기반 백엔드입니다.
 현재는 `Auth`, `User`, `Pitch`, `Notice` API가 구현되어 있으며, AI 분석은 별도 FastAPI 서비스와 연동합니다.
 
 ## 1) Tech Stack
+
 - Node.js 20
 - NestJS 11
 - pnpm
@@ -13,6 +14,7 @@ NestJS + Prisma 기반 백엔드입니다.
 - Swagger (`@nestjs/swagger`)
 
 ## 2) Project Structure
+
 - `src/main.ts`
   - 전역 `ValidationPipe` 적용 (`whitelist`, `forbidNonWhitelisted`, `transform`)
   - 전역 `GlobalExceptionFilter` 적용
@@ -43,6 +45,7 @@ NestJS + Prisma 기반 백엔드입니다.
   - DB 마이그레이션 이력
 
 ## 3) Environment Variables
+
 루트 `.env` 파일 필요:
 
 ```env
@@ -53,10 +56,12 @@ PORT=3000
 ```
 
 주의:
+
 - `JWT_SECRET` 누락 시 앱이 시작 단계에서 에러로 종료됩니다.
 - `AI_SERVER_URL`은 `GET /ai/test` 및 Notice 분석 연동 호출에 사용됩니다.
 
 ## 4) Local Setup
+
 ```bash
 pnpm install
 pnpm prisma generate
@@ -65,10 +70,12 @@ pnpm run start:dev
 ```
 
 서버 기본 주소:
+
 - App: `http://localhost:3000`
 - Swagger: `http://localhost:3000/api-docs`
 
 ## 5) Swagger Policy
+
 현재 Swagger에는 `Auth`, `User`, `Notice`, `Pitch` 모듈이 노출됩니다.
 
 ```ts
@@ -82,16 +89,20 @@ SwaggerModule.createDocument(app, config, {
 ## 6) API Overview
 
 ### 6.1 Auth (Swagger 노출)
+
 Base path: `/api/auth`
 
 #### POST `/api/auth/signup`
+
 설명:
+
 - 이메일/전화번호 중복 검사
 - 비밀번호 bcrypt 해시 저장
 - access/refresh 토큰 발급
 - refresh 토큰 해시와 만료 시각 저장
 
 Request body:
+
 ```json
 {
   "name": "홍길동",
@@ -102,6 +113,7 @@ Request body:
 ```
 
 성공 응답 예시:
+
 ```json
 {
   "user_id": "uuid",
@@ -115,16 +127,20 @@ Request body:
 ```
 
 실패 케이스:
+
 - `409 EMAIL_ALREADY_EXISTS`
 - `409 PHONE_ALREADY_EXISTS`
 
 #### POST `/api/auth/login`
+
 설명:
+
 - 이메일 + 비밀번호 검증
 - 삭제 계정(`isDeleted=true`) 로그인 차단
 - 성공 시 access/refresh 토큰 재발급
 
 Request body:
+
 ```json
 {
   "email": "user@example.com",
@@ -133,6 +149,7 @@ Request body:
 ```
 
 성공 응답 예시:
+
 ```json
 {
   "user_id": "uuid",
@@ -145,14 +162,18 @@ Request body:
 ```
 
 실패 케이스:
+
 - `401 INVALID_CREDENTIALS`
 
 #### GET `/api/auth/me`
+
 설명:
+
 - `Authorization: Bearer <access_token>` 필요
 - JWT 검증 후 사용자 프로필 반환
 
 성공 응답 예시:
+
 ```json
 {
   "user_id": "uuid",
@@ -169,12 +190,15 @@ Request body:
 ```
 
 실패 케이스:
+
 - `401 UNAUTHORIZED`
 
 ### 6.2 Pitch (Swagger 노출)
+
 - `POST /api/pitches`
 
 Request body:
+
 ```json
 {
   "title": "2026 정부지원사업 발표",
@@ -185,6 +209,7 @@ Request body:
 ```
 
 성공 응답 예시:
+
 ```json
 {
   "pitch_id": "uuid",
@@ -202,32 +227,38 @@ Request body:
 ```
 
 ### 6.3 Notice (Swagger 노출)
+
 - `POST /api/pitches/:pitchId/notices/analyze`
 - `GET /api/notices/:noticeId`
 - `PATCH /api/notices/:noticeId`
 
 설명:
+
 - Notice 메타데이터와 심사 기준은 PostgreSQL에 저장합니다.
 - PDF 분석 자체는 `AI_SERVER_URL`로 연결된 FastAPI 서비스에 위임합니다.
 - 조회 시 분석이 진행 중이면 AI 결과를 polling 동기화합니다.
 
 ### 6.4 기타 API
+
 - `GET /users`
 - `GET /ai/test` (`Swagger` 미노출)
 
 ## 7) Validation Rules
 
 ### SignupDto
+
 - `name`: 빈 값 불가
 - `email`: 이메일 형식
 - `phone`: `01x-xxxx-xxxx` 형식 검증
 - `password`: 영문/숫자/특수문자 포함 8~16자
 
 ### LoginDto
+
 - `email`: 이메일 형식 + 빈 값 불가
 - `password`: 문자열, 빈 값 불가, 8~16자
 
 ## 8) Auth/Security Details
+
 - Access token TTL: `1h`
 - Refresh token TTL: `7d`
 - refresh token은 DB에 평문 저장하지 않고 `refreshTokenHash` 저장
@@ -240,7 +271,9 @@ Request body:
 ## 9) Database Schema (Summary)
 
 ### User
+
 핵심 필드:
+
 - 식별/인증: `id`, `email`, `phone`, `password`, `authType`
 - 프로필: `name`, `gender`, `education`, `businessField`, `businessDuration`
 - 상태: `isProfileComplete`, `isDeleted`, `deletedAt`
@@ -248,12 +281,15 @@ Request body:
 - 통계: `totalPitchesCount`, `completedPitchesCount`
 
 ### Pitch
+
 핵심 필드:
+
 - 관계: `userId` (User 1:N)
 - 내용: `title`, `pitchType`, `durationMinutes`, `hasNotice`, `noticeType`
 - 상태: `status`, `isDeleted`, `deletedAt`
 
 ## 10) Error Response Format
+
 전역 예외 필터 기준:
 
 ```json
@@ -267,6 +303,7 @@ Request body:
 ```
 
 ## 11) Test
+
 ```bash
 # unit
 pnpm run test
@@ -279,18 +316,22 @@ pnpm run test:e2e
 ```
 
 `src/modules/auth/auth.flow.spec.ts` 검증 항목:
+
 1. 정상 로그인 -> `/me` 성공
 2. 삭제 계정 로그인 -> 401
 3. refresh 토큰으로 보호 API 접근 -> 401
 
 ## 12) CI
+
 `.github/workflows/ci.yml`
+
 1. `pnpm install --frozen-lockfile`
 2. `pnpm prisma generate`
 3. `pnpm run --if-present test`
 4. `pnpm run build`
 
 ## 13) Common Issues
+
 - Swagger에 `ai`가 안 보임
   - 정상입니다. 현재 문서 노출 범위는 `AuthModule`, `UserModule`, `NoticeModule`, `PitchModule`입니다.
 - `JWT_SECRET is required`로 서버가 시작 실패
