@@ -14,7 +14,7 @@ export class SetQAModeDto {
       'Q&A 훈련 방식 (REALTIME: 실제 질문에 음성으로 답변, GUIDE_ONLY: 질문과 가이드만 확인)',
   })
   @IsEnum(QAModeEnum)
-  qa_mode: QAModeEnum;
+  qa_mode!: QAModeEnum;
 
   @ApiProperty({
     example: false,
