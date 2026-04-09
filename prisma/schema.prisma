@@ -88,10 +88,11 @@ model Pitch {
   deletedAt DateTime?
   isDeleted Boolean   @default(false)
 
-  notices    Notice[]
-  irDecks    IRDeck[]
-  rehearsals Rehearsal[]
-  report     Report?
+  notices     Notice[]
+  irDecks     IRDeck[]
+  rehearsals  Rehearsal[]
+  qATrainings QATraining[]
+  report      Report?
 
   @@index([userId])
   @@index([status])
@@ -359,7 +360,6 @@ model Rehearsal {
   detailScores      RehearsalDetailScore[]
   deliveryAnalyses  RehearsalDeliveryAnalysis[]
   slideAnalyses     RehearsalSlideAnalysis[]
-  qaTraining        QATraining?
   reports           Report[]
 
   @@unique([pitchId, rehearsalNumber])
@@ -440,18 +440,29 @@ model RehearsalSlideAnalysis {
 model QATraining {
   id String @id @default(uuid())
 
-  rehearsalId String    @unique
-  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  pitchId String
+  pitch   Pitch  @relation(fields: [pitchId], references: [id], onDelete: Cascade)
+
+  rehearsalId String?
+
+  noticeId String?
+  irDeckId String?
+  voiceAnalysisId String?
 
   mode           String
   totalQuestions Int    @default(5)
   totalScore     Int?
+  version        Int    @default(1)
+  isLatest       Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   questions QAQuestion[]
 
+  @@unique([pitchId, version])
+  @@index([pitchId])
+  @@index([pitchId, isLatest])
   @@index([rehearsalId])
 }
 

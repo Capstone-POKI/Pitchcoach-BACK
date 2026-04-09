@@ -9,6 +9,7 @@ import { NoticeModule } from './modules/notice/notice.module';
 import { DeckModule } from './modules/deck/deck.module';
 import { PitchModule } from './modules/pitch/pitch.module';
 import { RehearsalModule } from './modules/rehearsal/rehearsal.module';
+import { QaModule } from './modules/qa/qa.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RehearsalModule } from './modules/rehearsal/rehearsal.module';
     DeckModule,
     PitchModule,
     RehearsalModule,
+    QaModule,
   ],
 })
 export class AppModule {}
