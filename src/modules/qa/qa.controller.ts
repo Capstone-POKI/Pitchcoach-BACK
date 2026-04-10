@@ -1,11 +1,14 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
   Patch,
   Req,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -14,10 +17,12 @@ import {
   ApiOperation,
   ApiParam,
   ApiResponse,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { GetQAQuestionsResponseDto } from './dto/get-qa-questions.response.dto';
 import { SetQAModeDto } from './dto/set-qa-mode.dto';
 import { SetQAModeResponseDto } from './dto/set-qa-mode.response.dto';
 import { QaService } from './qa.service';
@@ -26,12 +31,95 @@ interface AuthenticatedRequest extends Request {
   user: { id: string };
 }
 
+function parseBooleanQuery(value: string | string[] | undefined): boolean {
+  if (value == null) return false;
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return false;
+    if (value.length > 1) {
+      throw new BadRequestException({
+        error: 'INVALID_REQUEST',
+        message: 'regenerate_guides는 boolean 값이어야 합니다.',
+      });
+    }
+
+    return parseBooleanQuery(value[0]);
+  }
+
+  if (value === '') return false;
+
+  const normalized = value.trim().toLowerCase();
+  if (['true', '1', 'yes'].includes(normalized)) return true;
+  if (['false', '0', 'no'].includes(normalized)) return false;
+
+  throw new BadRequestException({
+    error: 'INVALID_REQUEST',
+    message: 'regenerate_guides는 boolean 값이어야 합니다.',
+  });
+}
+
 @ApiTags('QA')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('api')
 export class QaController {
   constructor(private readonly qaService: QaService) {}
+
+  @Get('pitches/:pitchId/questions')
+  @ApiOperation({
+    summary: '질문 목록 조회 및 답변 가이드 생성',
+    description:
+      '특정 Pitch의 최신 Q&A 훈련 질문을 조회하고, 답변 가이드가 비어 있으면 자동 생성하여 저장합니다. regenerate_guides=true이면 기존 가이드도 재생성합니다.',
+  })
+  @ApiParam({ name: 'pitchId', description: 'Pitch ID' })
+  @ApiQuery({
+    name: 'regenerate_guides',
+    required: false,
+    type: Boolean,
+    example: false,
+    description: '기존 답변 가이드를 재생성할지 여부',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '질문 목록 조회 및 답변 가이드 생성 성공',
+    type: GetQAQuestionsResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    schema: {
+      example: { error: 'UNAUTHORIZED', message: '인증이 필요합니다.' },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    schema: {
+      oneOf: [
+        {
+          example: {
+            error: 'PITCH_NOT_FOUND',
+            message: '해당 pitch를 찾을 수 없습니다.',
+          },
+        },
+        {
+          example: {
+            error: 'QA_TRAINING_NOT_FOUND',
+            message: '최신 Q&A 훈련 정보를 찾을 수 없습니다.',
+          },
+        },
+      ],
+    },
+  })
+  getQuestions(
+    @Param('pitchId') pitchId: string,
+    @Query('regenerate_guides') regenerateGuides: string | undefined,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<GetQAQuestionsResponseDto> {
+    return this.qaService.getQuestions(
+      req.user.id,
+      pitchId,
+      parseBooleanQuery(regenerateGuides),
+    );
+  }
 
   @Patch('pitches/:pitchId/qa-mode')
   @HttpCode(HttpStatus.OK)
@@ -69,7 +157,9 @@ export class QaController {
   })
   @ApiResponse({
     status: 401,
-    schema: { example: { error: 'UNAUTHORIZED', message: '인증이 필요합니다.' } },
+    schema: {
+      example: { error: 'UNAUTHORIZED', message: '인증이 필요합니다.' },
+    },
   })
   @ApiResponse({
     status: 404,
