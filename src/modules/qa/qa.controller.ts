@@ -91,6 +91,15 @@ export class QaController {
     },
   })
   @ApiResponse({
+    status: 403,
+    schema: {
+      example: {
+        error: 'UNAUTHORIZED',
+        message: '해당 pitch에 접근할 권한이 없습니다.',
+      },
+    },
+  })
+  @ApiResponse({
     status: 404,
     schema: {
       oneOf: [
