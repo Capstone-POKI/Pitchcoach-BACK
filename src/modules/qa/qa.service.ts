@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { GetQAQuestionsResponseDto } from './dto/get-qa-questions.response.dto';
 import { QAModeEnum, SetQAModeDto } from './dto/set-qa-mode.dto';
 import { SetQAModeResponseDto } from './dto/set-qa-mode.response.dto';
 
@@ -16,11 +17,35 @@ type QAQuestionDraft = {
   displayOrder: number;
 };
 
+type QAQuestionRow = {
+  id: string;
+  category: string;
+  displayOrder: number;
+  question: string;
+  answerGuide: string;
+  answer: { id: string } | null;
+};
+
+type QATrainingRow = {
+  pitchId: string;
+  id: string;
+  noticeId: string | null;
+  irDeckId: string | null;
+  voiceAnalysisId: string | null;
+  mode: string;
+  totalQuestions: number;
+  version: number;
+  isLatest: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 function safeJsonArray(value: string | null | undefined): string[] {
   if (!value) return [];
   try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === 'string');
   } catch {
     return [];
   }
@@ -35,6 +60,53 @@ function shortenText(value: string | null | undefined, maxLength = 70): string {
   if (!text) return '';
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength).trimEnd()}...`;
+}
+
+function normalizeCategory(category: string): string {
+  return compactText(category).replace(/\s+/g, '').toUpperCase();
+}
+
+function buildDefaultAnswerGuide(question: string, category: string): string {
+  const normalizedCategory = normalizeCategory(category);
+
+  switch (normalizedCategory) {
+    case 'PROBLEM':
+    case '문제':
+    case '문제정의':
+      return '문제의 규모, 발생 배경, 기존 대안의 한계, 검증 근거를 함께 설명하세요.';
+    case 'SOLUTION':
+    case '솔루션':
+      return '핵심 해결 방식, 차별점, 구현 단계, 검증 결과를 함께 설명하세요.';
+    case 'MARKET_BIZ':
+    case 'MARKETBIZ':
+    case '시장비즈니스':
+    case '시장/비즈니스':
+      return '시장 규모, 고객 세분화, 수익 모델, 확장 계획을 수치와 함께 설명하세요.';
+    case 'PERFORMANCE':
+    case '실적':
+      return '실적 지표, 전후 비교, 성장 신호, 재현 가능한 근거를 중심으로 설명하세요.';
+    case 'TEAM':
+      return '핵심 팀원의 역할, 관련 경험, 실행 체계, 보완 인력을 설명하세요.';
+    case 'FUNDING':
+    case '자금계획':
+    case '자금계획안':
+    case '자금':
+      return '자금 사용 우선순위, 단계별 집행 계획, 성과 지표, 일정과 연결해 설명하세요.';
+    case 'JUDGE_TYPE':
+    case '심사유형':
+    case '심사위원':
+      return '심사위원이 확인하려는 핵심 쟁점을 먼저 정리하고, 결론-근거-사례 순으로 답변하세요.';
+    case 'NOTICE':
+      return '공고의 핵심 요구사항, 평가 기준, 일정, 제출 조건에 어떻게 대응하는지 설명하세요.';
+    case 'IR_DECK':
+      return 'Deck의 핵심 메시지, 구조, 개선 포인트, 발표 흐름과의 연결을 설명하세요.';
+    case 'SLIDE':
+      return '해당 슬라이드의 역할, 핵심 메시지, 근거, 다음 질문에 대한 대비를 설명하세요.';
+    default: {
+      const topic = shortenText(question.replace(/[?？]/g, ''), 30) || '질문';
+      return `${topic}에 대해 답변의 결론, 근거, 수치 또는 사례, 실행 계획을 순서대로 설명하세요.`;
+    }
+  }
 }
 
 @Injectable()
@@ -85,6 +157,143 @@ export class QaService {
         answer_guide: question.answerGuide,
       })),
     };
+  }
+
+  private mapQuestionListResponse(
+    training: QATrainingRow,
+    questions: QAQuestionRow[],
+  ): GetQAQuestionsResponseDto {
+    return {
+      pitch_id: training.pitchId,
+      qa_training: {
+        qa_training_id: training.id,
+        mode: training.mode,
+        total_questions: training.totalQuestions,
+        version: training.version,
+        is_latest: training.isLatest,
+      },
+      questions: questions.map((question) => ({
+        question_id: question.id,
+        category: question.category,
+        display_order: question.displayOrder,
+        question: question.question,
+        answer_guide: question.answerGuide,
+        has_answer: Boolean(question.answer),
+      })),
+      updated_at: training.updatedAt.toISOString(),
+    };
+  }
+
+  private buildAnswerGuideForQuestion(question: {
+    category: string;
+    question: string;
+  }): string {
+    return buildDefaultAnswerGuide(question.question, question.category);
+  }
+
+  private async findLatestQATrainingWithQuestions(
+    pitchId: string,
+  ): Promise<(QATrainingRow & { questions: QAQuestionRow[] }) | null> {
+    return this.prisma.qATraining.findFirst({
+      where: {
+        pitchId,
+        isLatest: true,
+      },
+      include: {
+        questions: {
+          orderBy: {
+            displayOrder: 'asc',
+          },
+          include: {
+            answer: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async getQuestions(
+    userId: string,
+    pitchId: string,
+    regenerateGuides = false,
+  ): Promise<GetQAQuestionsResponseDto> {
+    const pitch = await this.prisma.pitch.findUnique({
+      where: { id: pitchId },
+      select: {
+        id: true,
+        userId: true,
+        isDeleted: true,
+      },
+    });
+
+    if (!pitch || pitch.isDeleted) {
+      throw new NotFoundException({
+        error: 'PITCH_NOT_FOUND',
+        message: '해당 pitch를 찾을 수 없습니다.',
+      });
+    }
+
+    if (pitch.userId !== userId) {
+      throw new ForbiddenException({
+        error: 'UNAUTHORIZED',
+        message: '인증이 필요합니다.',
+      });
+    }
+
+    const latestQATraining =
+      await this.findLatestQATrainingWithQuestions(pitchId);
+
+    if (!latestQATraining) {
+      throw new NotFoundException({
+        error: 'QA_TRAINING_NOT_FOUND',
+        message: '최신 Q&A 훈련 정보를 찾을 수 없습니다.',
+      });
+    }
+
+    const questionsToRefresh = latestQATraining.questions.filter(
+      (question) => regenerateGuides || !compactText(question.answerGuide),
+    );
+
+    if (questionsToRefresh.length > 0) {
+      await this.prisma.$transaction(async (tx) => {
+        for (const question of questionsToRefresh) {
+          await tx.qAQuestion.update({
+            where: { id: question.id },
+            data: {
+              answerGuide: this.buildAnswerGuideForQuestion(question),
+            },
+          });
+        }
+
+        await tx.qATraining.update({
+          where: { id: latestQATraining.id },
+          data: {
+            mode: latestQATraining.mode,
+          },
+        });
+      });
+    }
+
+    const refreshedQATraining =
+      questionsToRefresh.length > 0
+        ? await this.findLatestQATrainingWithQuestions(pitchId)
+        : latestQATraining;
+
+    if (!refreshedQATraining) {
+      throw new NotFoundException({
+        error: 'QA_TRAINING_NOT_FOUND',
+        message: '최신 Q&A 훈련 정보를 찾을 수 없습니다.',
+      });
+    }
+
+    return this.mapQuestionListResponse(
+      refreshedQATraining,
+      refreshedQATraining.questions,
+    );
   }
 
   private buildQuestionsFromContext(params: {
@@ -188,7 +397,8 @@ export class QaService {
           category: 'NOTICE',
           label: 'IR Deck 가이드',
           value: notice.irDeckGuide,
-          guide: '공고의 IR Deck 가이드를 발표 내용에 어떻게 반영했는지 설명하세요.',
+          guide:
+            '공고의 IR Deck 가이드를 발표 내용에 어떻게 반영했는지 설명하세요.',
         },
         {
           category: 'NOTICE',
@@ -422,15 +632,17 @@ export class QaService {
       },
     });
 
+    const requestedMode = String(dto.qa_mode);
+
     if (existingQATraining && !forceRegenerate) {
-      if (existingQATraining.mode !== dto.qa_mode) {
+      if (existingQATraining.mode !== requestedMode) {
         await this.prisma.qATraining.updateMany({
           where: {
             pitchId,
             isLatest: true,
           },
           data: {
-            mode: dto.qa_mode,
+            mode: requestedMode,
           },
         });
       }
@@ -438,7 +650,7 @@ export class QaService {
       return this.mapQATrainingResponse(
         {
           ...existingQATraining,
-          mode: dto.qa_mode,
+          mode: requestedMode,
         },
         existingQATraining.questions,
       );
@@ -456,11 +668,13 @@ export class QaService {
             coreRequirements: latestNotice.coreRequirements,
             additionalCriteria: latestNotice.additionalCriteria,
             irDeckGuide: latestNotice.irDeckGuide,
-            evaluationCriteria: latestNotice.evaluationCriteria.map((criteria) => ({
-              criteriaName: criteria.criteriaName,
-              pitchcoachInterpretation: criteria.pitchcoachInterpretation,
-              irGuide: criteria.irGuide,
-            })),
+            evaluationCriteria: latestNotice.evaluationCriteria.map(
+              (criteria) => ({
+                criteriaName: criteria.criteriaName,
+                pitchcoachInterpretation: criteria.pitchcoachInterpretation,
+                irGuide: criteria.irGuide,
+              }),
+            ),
           }
         : null,
       irDeck: latestIrDeck
@@ -527,6 +741,9 @@ export class QaService {
       });
     });
 
-    return this.mapQATrainingResponse(createdQATraining, createdQATraining.questions);
+    return this.mapQATrainingResponse(
+      createdQATraining,
+      createdQATraining.questions,
+    );
   }
 }
