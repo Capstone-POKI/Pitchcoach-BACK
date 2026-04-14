@@ -659,11 +659,25 @@ export class RehearsalService {
     context?: AiVoiceAnalyzeContext,
     options?: AiVoiceAnalyzeOptions,
   ) {
+    const MIME_TO_EXT: Record<string, string> = {
+      'audio/webm': '.webm',
+      'audio/mpeg': '.mp3',
+      'audio/mp4': '.m4a',
+      'audio/wav': '.wav',
+      'audio/ogg': '.ogg',
+      'video/mp4': '.mp4',
+    };
+    const ALLOWED_AI_EXTS = new Set(['.webm', '.mp3', '.m4a', '.wav', '.ogg', '.mp4']);
+    const originalExt = '.' + (file.originalname.split('.').pop() ?? '').toLowerCase();
+    const normalizedFilename = ALLOWED_AI_EXTS.has(originalExt)
+      ? file.originalname
+      : 'recording' + (MIME_TO_EXT[file.mimetype] ?? '.webm');
+
     this.fastApiClient
       .analyzeVoice(
         pitchId,
         file.buffer,
-        file.originalname,
+        normalizedFilename,
         pitchType,
         slideTimestamps,
         context,

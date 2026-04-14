@@ -392,6 +392,18 @@ export class NoticeService {
       )
       .catch((err: Error) => {
         this.logger.error(`AI 서버 호출 실패: ${err.message}`);
+        this.prisma.notice
+          .update({
+            where: { id: noticeId },
+            data: {
+              analysisStatus: 'FAILED',
+              pdfUploadStatus: 'FAILED',
+              errorMessage: `AI 서버 연결 실패: ${err.message}`,
+            },
+          })
+          .catch((dbErr: Error) =>
+            this.logger.error(`notice FAILED 업데이트 실패: ${dbErr.message}`),
+          );
       });
   }
 
