@@ -1,25 +1,53 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { QaService } from './qa.service';
 
 type TxRunner = (tx: {
-  qAQuestion: { update: jest.Mock };
-  qATraining: { update: jest.Mock };
+  qAQuestion: { update: UpdateMock };
+  qATraining: { update: UpdateMock };
 }) => unknown;
 
+type UpdateMock = ReturnType<
+  typeof jest.fn<(args: unknown) => Promise<unknown>>
+>;
+type FindUniqueMock = ReturnType<
+  typeof jest.fn<(args: unknown) => Promise<unknown>>
+>;
+type FindFirstMock = ReturnType<
+  typeof jest.fn<(args: unknown) => Promise<unknown>>
+>;
+type TransactionMock = ReturnType<
+  typeof jest.fn<(runner: TxRunner) => Promise<unknown>>
+>;
+
+type PrismaMock = {
+  pitch: {
+    findUnique: FindUniqueMock;
+  };
+  qATraining: {
+    findFirst: FindFirstMock;
+    update: UpdateMock;
+  };
+  qAQuestion: {
+    update: UpdateMock;
+  };
+  $transaction: TransactionMock;
+};
+
 describe('QaService.getQuestions', () => {
-  const prisma = {
+  const prisma: PrismaMock = {
     pitch: {
-      findUnique: jest.fn(),
+      findUnique: jest.fn<(args: unknown) => Promise<unknown>>(),
     },
     qATraining: {
-      findFirst: jest.fn(),
-      update: jest.fn(),
+      findFirst: jest.fn<(args: unknown) => Promise<unknown>>(),
+      update: jest.fn<(args: unknown) => Promise<unknown>>(),
     },
     qAQuestion: {
-      update: jest.fn(),
+      update: jest.fn<(args: unknown) => Promise<unknown>>(),
     },
-    $transaction: jest.fn(),
+    $transaction: jest.fn<(runner: TxRunner) => Promise<unknown>>(),
   };
 
   const service = new QaService(prisma as any);
