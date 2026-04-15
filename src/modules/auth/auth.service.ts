@@ -9,7 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { SignupDto } from './dto/signup.dto';
 import { GoogleAuthService } from './google-auth.service';
 
-const ACCESS_TOKEN_EXPIRES_IN = '1h';
+const ACCESS_TOKEN_EXPIRES_IN = '12h';
 const REFRESH_TOKEN_EXPIRES_IN = '7d';
 const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 

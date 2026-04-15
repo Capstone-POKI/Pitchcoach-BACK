@@ -21,7 +21,7 @@ import { GoogleAuthService } from './google-auth.service';
 
         return {
           secret: jwtSecret,
-          signOptions: { expiresIn: '1h' },
+          signOptions: { expiresIn: '12h' },
         };
       },
     }),
