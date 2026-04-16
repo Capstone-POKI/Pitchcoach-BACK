@@ -35,6 +35,22 @@ type PrismaMock = {
   $transaction: TransactionMock;
 };
 
+type FastApiClientMock = {
+  generateQaQuestions: ReturnType<
+    typeof jest.fn<
+      (
+        args: unknown,
+        a2?: unknown,
+        a3?: unknown,
+        a4?: unknown,
+      ) => Promise<unknown>
+    >
+  >;
+  getQaQuestions: ReturnType<
+    typeof jest.fn<(args: unknown) => Promise<unknown>>
+  >;
+};
+
 describe('QaService.getQuestions', () => {
   const prisma: PrismaMock = {
     pitch: {
@@ -50,7 +66,20 @@ describe('QaService.getQuestions', () => {
     $transaction: jest.fn<(runner: TxRunner) => Promise<unknown>>(),
   };
 
-  const service = new QaService(prisma as any);
+  const fastApiClient: FastApiClientMock = {
+    generateQaQuestions:
+      jest.fn<
+        (
+          args: unknown,
+          a2?: unknown,
+          a3?: unknown,
+          a4?: unknown,
+        ) => Promise<unknown>
+      >(),
+    getQaQuestions: jest.fn<(args: unknown) => Promise<unknown>>(),
+  };
+
+  const service = new QaService(prisma as any, fastApiClient as any);
 
   const baseTraining = {
     pitchId: 'pitch-1',

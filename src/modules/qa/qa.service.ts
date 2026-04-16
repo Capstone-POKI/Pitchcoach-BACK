@@ -3,9 +3,11 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { FastApiClient } from '../../infra/fastapi/fastapi.client';
 import { GetQAQuestionsResponseDto } from './dto/get-qa-questions.response.dto';
 import { QAModeEnum, SetQAModeDto } from './dto/set-qa-mode.dto';
 import { SetQAModeResponseDto } from './dto/set-qa-mode.response.dto';
@@ -111,7 +113,12 @@ function buildDefaultAnswerGuide(question: string, category: string): string {
 
 @Injectable()
 export class QaService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(QaService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly fastApiClient: FastApiClient,
+  ) {}
 
   private mapQATrainingResponse(
     training: {
@@ -214,6 +221,224 @@ export class QaService {
         },
       },
     });
+  }
+
+  private static sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  private buildNoticeContextText(
+    notice: {
+      noticeName: string;
+      hostOrganization: string | null;
+      recruitmentType: string | null;
+      targetAudience: string | null;
+      applicationPeriod: string | null;
+      summary: string | null;
+      coreRequirements: string | null;
+      additionalCriteria: string | null;
+      irDeckGuide: string | null;
+      evaluationCriteria: Array<{
+        criteriaName: string;
+        pitchcoachInterpretation: string | null;
+        irGuide: string | null;
+      }>;
+    } | null,
+  ): string {
+    if (!notice) {
+      return '공고 정보 없음';
+    }
+
+    const criteriaText = notice.evaluationCriteria
+      .map((criteria, index) => {
+        const interpretation = compactText(criteria.pitchcoachInterpretation);
+        const guide = compactText(criteria.irGuide);
+        return [
+          `${index + 1}. ${criteria.criteriaName}`,
+          interpretation ? `- 해석: ${interpretation}` : null,
+          guide ? `- IR 가이드: ${guide}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n');
+      })
+      .join('\n');
+
+    return [
+      notice.noticeName ? `공고명: ${notice.noticeName}` : null,
+      notice.hostOrganization ? `주관기관: ${notice.hostOrganization}` : null,
+      notice.recruitmentType ? `모집유형: ${notice.recruitmentType}` : null,
+      notice.targetAudience ? `대상: ${notice.targetAudience}` : null,
+      notice.applicationPeriod ? `신청기간: ${notice.applicationPeriod}` : null,
+      notice.summary ? `요약: ${notice.summary}` : null,
+      notice.coreRequirements
+        ? `핵심요구사항: ${notice.coreRequirements}`
+        : null,
+      notice.additionalCriteria
+        ? `추가조건: ${notice.additionalCriteria}`
+        : null,
+      notice.irDeckGuide ? `IR Deck 가이드: ${notice.irDeckGuide}` : null,
+      criteriaText ? `평가기준:\n${criteriaText}` : null,
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n');
+  }
+
+  private buildIrDeckContextText(
+    irDeck: {
+      totalScore: number | null;
+      presentationGuide: string | null;
+      emphasizedSlides: string | null;
+      improvedItems: string | null;
+      slides: Array<{
+        slideNumber: number;
+        category: string | null;
+        contentSummary: string | null;
+      }>;
+      deckScore?: {
+        structureSummary: string | null;
+        strengths: string | null;
+        improvements: string | null;
+      } | null;
+    } | null,
+  ): string {
+    if (!irDeck) {
+      return 'IR Deck 정보 없음';
+    }
+
+    const slideSummary = irDeck.slides
+      .slice(0, 8)
+      .map((slide) => {
+        const category = compactText(slide.category);
+        const summary = compactText(slide.contentSummary);
+        if (!summary) {
+          return null;
+        }
+        return `- 슬라이드 ${slide.slideNumber}${category ? ` (${category})` : ''}: ${summary}`;
+      })
+      .filter((line): line is string => Boolean(line))
+      .join('\n');
+
+    return [
+      irDeck.totalScore != null ? `IR Deck 총점: ${irDeck.totalScore}` : null,
+      irDeck.deckScore?.structureSummary
+        ? `구조 요약: ${irDeck.deckScore.structureSummary}`
+        : null,
+      irDeck.deckScore?.strengths
+        ? `강점: ${safeJsonArray(irDeck.deckScore.strengths).join(', ')}`
+        : null,
+      irDeck.deckScore?.improvements
+        ? `개선점: ${safeJsonArray(irDeck.deckScore.improvements).join(', ')}`
+        : null,
+      irDeck.presentationGuide
+        ? `발표 가이드: ${irDeck.presentationGuide}`
+        : null,
+      irDeck.emphasizedSlides
+        ? `중요 슬라이드: ${irDeck.emphasizedSlides}`
+        : null,
+      irDeck.improvedItems ? `보완 항목: ${irDeck.improvedItems}` : null,
+      slideSummary ? `슬라이드 요약:\n${slideSummary}` : null,
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n');
+  }
+
+  private buildPresentationContextText(
+    rehearsal: {
+      transcription: string | null;
+      structureSummary: string | null;
+      overallStrengths: string | null;
+      overallImprovements: string | null;
+      improvedItems: string | null;
+    } | null,
+  ): string {
+    if (!rehearsal) {
+      return '발표 분석 정보 없음';
+    }
+
+    return [
+      rehearsal.structureSummary
+        ? `발표 구조 요약: ${rehearsal.structureSummary}`
+        : null,
+      rehearsal.overallStrengths
+        ? `발표 강점: ${rehearsal.overallStrengths}`
+        : null,
+      rehearsal.overallImprovements
+        ? `발표 개선점: ${rehearsal.overallImprovements}`
+        : null,
+      rehearsal.improvedItems ? `개선 항목: ${rehearsal.improvedItems}` : null,
+      rehearsal.transcription
+        ? `발표 전사:\n${shortenText(rehearsal.transcription, 4000)}`
+        : null,
+    ]
+      .filter((line): line is string => Boolean(line))
+      .join('\n');
+  }
+
+  private normalizeAiQuestionType(questionType: string): string {
+    const normalized = normalizeCategory(questionType);
+    if (normalized === 'PITCHBOOK') return 'IR_DECK';
+    if (normalized === 'PRESENTER') return 'PRESENTER';
+    if (normalized === 'EVALUATOR') return 'EVALUATOR';
+    if (normalized === 'NOTICE') return 'NOTICE';
+    return compactText(questionType) || 'NOTICE';
+  }
+
+  private async generateQuestionsViaAi(params: {
+    pitchId: string;
+    noticeContent: string;
+    irDeckSummary: string;
+    presentationContent?: string;
+  }): Promise<QAQuestionDraft[] | null> {
+    try {
+      await this.fastApiClient.generateQaQuestions(
+        params.pitchId,
+        params.noticeContent,
+        params.irDeckSummary,
+        params.presentationContent,
+      );
+
+      const maxRetries = 10;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const response = await this.fastApiClient.getQaQuestions(
+          params.pitchId,
+        );
+        const aiQuestions = response.questions ?? [];
+        if (aiQuestions.length > 0) {
+          return aiQuestions
+            .map((question, index) => {
+              const content = compactText(question.content);
+              if (!content) return null;
+
+              const category = this.normalizeAiQuestionType(question.type);
+              const guidance = compactText(question.guidance);
+
+              return {
+                category,
+                question: content,
+                answerGuide:
+                  guidance || buildDefaultAnswerGuide(content, category),
+                displayOrder: index + 1,
+              };
+            })
+            .filter((draft): draft is QAQuestionDraft => Boolean(draft));
+        }
+
+        await QaService.sleep(400);
+      }
+
+      this.logger.warn(
+        `AI Q&A generation returned no questions within retry window (pitchId=${params.pitchId})`,
+      );
+      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `AI Q&A generation failed, fallback to local generator (pitchId=${params.pitchId}): ${message}`,
+      );
+      return null;
+    }
   }
 
   async getQuestions(
@@ -567,6 +792,11 @@ export class QaService {
         select: {
           id: true,
           analysisStatus: true,
+          transcription: true,
+          structureSummary: true,
+          overallStrengths: true,
+          overallImprovements: true,
+          improvedItems: true,
         },
       }),
       this.prisma.notice.findFirst({
@@ -656,48 +886,72 @@ export class QaService {
       );
     }
 
-    const questions = this.buildQuestionsFromContext({
-      notice: latestNotice
-        ? {
-            noticeName: latestNotice.noticeName,
-            hostOrganization: latestNotice.hostOrganization,
-            recruitmentType: latestNotice.recruitmentType,
-            targetAudience: latestNotice.targetAudience,
-            applicationPeriod: latestNotice.applicationPeriod,
-            summary: latestNotice.summary,
-            coreRequirements: latestNotice.coreRequirements,
-            additionalCriteria: latestNotice.additionalCriteria,
-            irDeckGuide: latestNotice.irDeckGuide,
-            evaluationCriteria: latestNotice.evaluationCriteria.map(
-              (criteria) => ({
-                criteriaName: criteria.criteriaName,
-                pitchcoachInterpretation: criteria.pitchcoachInterpretation,
-                irGuide: criteria.irGuide,
-              }),
-            ),
-          }
-        : null,
-      irDeck: latestIrDeck
-        ? {
-            totalScore: latestIrDeck.totalScore,
-            presentationGuide: latestIrDeck.presentationGuide,
-            emphasizedSlides: latestIrDeck.emphasizedSlides,
-            improvedItems: latestIrDeck.improvedItems,
-            slides: latestIrDeck.slides.map((slide) => ({
-              slideNumber: slide.slideNumber,
-              category: slide.category,
-              contentSummary: slide.contentSummary,
-            })),
-            deckScore: latestIrDeck.deckScore
-              ? {
-                  structureSummary: latestIrDeck.deckScore.structureSummary,
-                  strengths: latestIrDeck.deckScore.strengths,
-                  improvements: latestIrDeck.deckScore.improvements,
-                }
-              : null,
-          }
-        : null,
+    const normalizedNotice = latestNotice
+      ? {
+          noticeName: latestNotice.noticeName,
+          hostOrganization: latestNotice.hostOrganization,
+          recruitmentType: latestNotice.recruitmentType,
+          targetAudience: latestNotice.targetAudience,
+          applicationPeriod: latestNotice.applicationPeriod,
+          summary: latestNotice.summary,
+          coreRequirements: latestNotice.coreRequirements,
+          additionalCriteria: latestNotice.additionalCriteria,
+          irDeckGuide: latestNotice.irDeckGuide,
+          evaluationCriteria: latestNotice.evaluationCriteria.map(
+            (criteria) => ({
+              criteriaName: criteria.criteriaName,
+              pitchcoachInterpretation: criteria.pitchcoachInterpretation,
+              irGuide: criteria.irGuide,
+            }),
+          ),
+        }
+      : null;
+
+    const normalizedIrDeck = latestIrDeck
+      ? {
+          totalScore: latestIrDeck.totalScore,
+          presentationGuide: latestIrDeck.presentationGuide,
+          emphasizedSlides: latestIrDeck.emphasizedSlides,
+          improvedItems: latestIrDeck.improvedItems,
+          slides: latestIrDeck.slides.map((slide) => ({
+            slideNumber: slide.slideNumber,
+            category: slide.category,
+            contentSummary: slide.contentSummary,
+          })),
+          deckScore: latestIrDeck.deckScore
+            ? {
+                structureSummary: latestIrDeck.deckScore.structureSummary,
+                strengths: latestIrDeck.deckScore.strengths,
+                improvements: latestIrDeck.deckScore.improvements,
+              }
+            : null,
+        }
+      : null;
+
+    const questionsFromAi = await this.generateQuestionsViaAi({
+      pitchId,
+      noticeContent: this.buildNoticeContextText(normalizedNotice),
+      irDeckSummary: this.buildIrDeckContextText(normalizedIrDeck),
+      presentationContent: this.buildPresentationContextText(
+        latestRehearsal
+          ? {
+              transcription: latestRehearsal.transcription,
+              structureSummary: latestRehearsal.structureSummary,
+              overallStrengths: latestRehearsal.overallStrengths,
+              overallImprovements: latestRehearsal.overallImprovements,
+              improvedItems: latestRehearsal.improvedItems,
+            }
+          : null,
+      ),
     });
+
+    const questions =
+      questionsFromAi && questionsFromAi.length > 0
+        ? questionsFromAi
+        : this.buildQuestionsFromContext({
+            notice: normalizedNotice,
+            irDeck: normalizedIrDeck,
+          });
 
     const createdQATraining = await this.prisma.$transaction(async (tx) => {
       const latestTraining = await tx.qATraining.findFirst({
