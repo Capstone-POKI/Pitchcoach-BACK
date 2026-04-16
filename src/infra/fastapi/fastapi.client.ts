@@ -178,6 +178,25 @@ export interface AiVoiceAnalyzeOptions {
   slide_timestamps?: object[];
 }
 
+export interface AiQaGenerateResponse {
+  session_id: string;
+  pitch_id: string;
+  status: string;
+}
+
+export interface AiQaQuestionItem {
+  question_id: string;
+  order: number;
+  type: string;
+  content: string;
+  guidance?: string | null;
+}
+
+export interface AiQaQuestionsResponse {
+  questions?: AiQaQuestionItem[];
+  total?: number;
+}
+
 @Injectable()
 export class FastApiClient {
   private readonly logger = new Logger(FastApiClient.name);
@@ -331,5 +350,31 @@ export class FastApiClient {
   async getVoiceSlides(voiceId: string): Promise<Record<string, unknown>> {
     const res = await axios.get(`${this.baseUrl}/api/voice/${voiceId}/slides`);
     return res.data as Record<string, unknown>;
+  }
+
+  async generateQaQuestions(
+    pitchId: string,
+    noticeContent: string,
+    irDeckSummary: string,
+    presentationContent?: string,
+  ): Promise<AiQaGenerateResponse> {
+    const form = new FormData();
+    form.append('notice_content', noticeContent);
+    form.append('irdecksummary', irDeckSummary);
+    if (presentationContent) {
+      form.append('presentation_content', presentationContent);
+    }
+
+    const res = await axios.post(
+      `${this.baseUrl}/api/pitches/${pitchId}/qa/questions/generate`,
+      form,
+      { headers: form.getHeaders() },
+    );
+    return res.data as AiQaGenerateResponse;
+  }
+
+  async getQaQuestions(pitchId: string): Promise<AiQaQuestionsResponse> {
+    const res = await axios.get(`${this.baseUrl}/api/pitches/${pitchId}/questions`);
+    return res.data as AiQaQuestionsResponse;
   }
 }
